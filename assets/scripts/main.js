@@ -47,3 +47,64 @@ if (navbar) {
     updateNavbarState();
     window.addEventListener('scroll', updateNavbarState, { passive: true });
 }
+
+
+// ============================================
+// SCROLLSPY: resalta el link del navbar según la sección visible
+// ============================================
+
+var allNavLinks = document.querySelectorAll('.nav-link');
+
+if ('IntersectionObserver' in window && allNavLinks.length) {
+    var scrollSpyObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            var currentHref = '#' + entry.target.id;
+            allNavLinks.forEach(function (link) {
+                var isCurrent = link.getAttribute('href') === currentHref;
+                link.classList.toggle('active', isCurrent);
+                if (isCurrent) {
+                    link.setAttribute('aria-current', 'true');
+                } else {
+                    link.removeAttribute('aria-current');
+                }
+            });
+        });
+    }, {
+        // Se activa cuando la sección ocupa la franja central de la pantalla
+        rootMargin: '-45% 0px -45% 0px'
+    });
+
+    document.querySelectorAll('main section[id]').forEach(function (section) {
+        scrollSpyObserver.observe(section);
+    });
+}
+
+
+// ============================================
+// APARICIÓN AL HACER SCROLL (suave y breve; nada con prefers-reduced-motion)
+// ============================================
+
+var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+if ('IntersectionObserver' in window && !reducedMotion) {
+    var revealTargets = document.querySelectorAll(
+        '.destacados .tarjeta, .seccion .contenedor > *:not(ul):not(ol):not(dl), .lista-puntos > li, .pasos > li, .rejilla-incluye > li, .rejilla-distinto > li, .caso-bloque'
+    );
+
+    var revealObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('is-visible');
+            revealObserver.unobserve(entry.target);
+        });
+    }, { rootMargin: '0px 0px -8% 0px' });
+
+    revealTargets.forEach(function (element) {
+        // Escalonado dentro de cada grupo de tarjetas
+        var siblings = element.parentElement.children;
+        element.style.setProperty('--indice', Array.prototype.indexOf.call(siblings, element) % 4);
+        element.classList.add('revelar');
+        revealObserver.observe(element);
+    });
+}

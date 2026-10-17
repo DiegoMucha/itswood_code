@@ -39,14 +39,11 @@
         var items = read(content, list.getAttribute('data-list'));
         if (!template || !Array.isArray(items)) return;
 
-        items.forEach(function (item, index) {
+        items.forEach(function (item) {
             var fragment = template.content.cloneNode(true);
             fill(fragment, item, 'data-item');
             fragment.querySelectorAll('[data-item-href]').forEach(function (element) {
                 element.setAttribute('href', read(item, element.getAttribute('data-item-href')));
-            });
-            fragment.querySelectorAll('[data-item-index]').forEach(function (element) {
-                element.style.setProperty('--indice', index);
             });
             list.appendChild(fragment);
         });
