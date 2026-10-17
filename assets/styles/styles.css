@@ -239,8 +239,8 @@ button:focus-visible {
 
 /* ========================================
    HERO: panel taupe del mismo color que el fondo de la escena de Spline
-   Arriba es más oscuro (--hero-profundo) para que el texto claro cumpla AA;
-   desde el 62% es --taupe-oscuro, igual que la escena, así no se ve su borde.
+   Arriba es más oscuro (--hero-profundo), sin cortes bruscos, para que el texto claro cumpla AA;
+   desde el 76% es --taupe-oscuro, igual que la escena, así no se ve su borde.
 ======================================== */
 
 .hero {
@@ -258,7 +258,7 @@ button:focus-visible {
     color: var(--crema-texto);
     background:
         radial-gradient(70% 45% at 50% 0%, rgba(235, 169, 138, 0.16), transparent 70%),
-        linear-gradient(180deg, var(--hero-profundo) 0%, var(--hero-profundo) 30%, var(--taupe-oscuro) 62%, var(--taupe-oscuro) 100%);
+        linear-gradient(180deg, var(--hero-profundo) 0%, #66523F 30%, #6D5947 52%, var(--taupe-oscuro) 76%, var(--taupe-oscuro) 100%);
 }
 
 .hero-texto {
@@ -398,6 +398,34 @@ button:focus-visible {
 @keyframes flotar {
     0%, 100% { translate: 0 0; }
     50%      { translate: 0 -12px; }
+}
+
+
+/* Escena de Spline (hero-scene.js). El iframe es más alto que el hero: su centro (donde está
+   la cinta) cae bajo los botones y la insignia de Spline, abajo a la derecha, queda recortada.
+   La máscara funde su borde superior con el degradado del hero. */
+.hero-escena {
+    position: absolute;
+    left: 0;
+    top: 36%;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--taupe-oscuro);
+    pointer-events: none;   /* decorativa: no captura el scroll ni el mouse */
+    opacity: 0;
+    transition: opacity 0.8s ease;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 40%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 40%);
+}
+
+.hero-visual.has-scene .hero-escena {
+    opacity: 1;
+}
+
+.hero-visual.has-scene .hero-composicion {
+    opacity: 0;
+    visibility: hidden;
 }
 
 
