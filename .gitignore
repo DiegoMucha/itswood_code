@@ -1,0 +1,11 @@
+# Material de referencia: nunca se versiona ni se despliega
+ref/
+
+# IDE
+.idea/
+
+# Sistema y entorno
+.DS_Store
+.env
+.env.*
+node_modules/

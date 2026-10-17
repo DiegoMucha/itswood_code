@@ -1,0 +1,7 @@
+# Material de referencia: nunca se despliega
+ref/
+
+.idea/
+.env
+.env.*
+README.md
