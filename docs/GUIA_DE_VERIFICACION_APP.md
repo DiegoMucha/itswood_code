@@ -97,7 +97,7 @@ Haz esto:
 Debe pasar:
 1. En "Pedido en vivo": Cliente "Valeria", Tipo "Persona", Cantidad "1 u.", Total referencial "S/ 115".
 2. Aparece la etiqueta "Automático" con el motivo "Persona · 1 u.".
-3. Aparece el aviso "Nuevo pedido resuelto por Mermín", "Valeria · 1 u. · S/ 115".
+3. Aparece el aviso "Nuevo pedido resuelto por Mermín", "Valeria · 1 u. · S/ 115". Si cambiaste el nombre del asistente en Ajustes, el aviso usa ese nombre.
 4. La campana sube a 4.
 
 Si no pasa: captura y anota qué etiqueta salió.
@@ -130,8 +130,13 @@ Haz esto:
 2. Baja hasta "¿Cómo va mi negocio?" y mira la tarjeta "Consultas que terminan en pedido".
 
 Debe pasar:
-1. "Atiende primero" muestra 5 pedidos. "Constructora Pacífico SAC" está en cuarto lugar, con la etiqueta "Derivado".
-2. "Grupo Miraflores SAC" no aparece en este recuadro. Es normal: ver "Diferencias conocidas", punto 1.
+1. "Atiende primero" muestra 5 pedidos. Los recién llegados van arriba, del más nuevo al más antiguo:
+   1. "Derivado" · Constructora Pacífico SAC (el último que llegó).
+   2. "Alta" · Grupo Miraflores SAC.
+   3. "Alta" · Inversiones Andinas SAC.
+   4. "Derivado" · Estudio Contable Ríos.
+   5. "Alta" · Colegio Los Pinos.
+2. "Valeria" no aparece, porque su pedido es "Automático": Mermín lo resolvió solo.
 3. "Consultas que terminan en pedido" dice "40 %" y "18 de 45 conversaciones" (antes decía "36 %" y "15 de 42").
 
 Si no pasa: captura del recuadro.
@@ -178,12 +183,14 @@ Dónde: http://localhost:5173/app
 Haz esto:
 1. Mira el recuadro "Atiende primero".
 
-Debe pasar: hay 5 pedidos, en este orden:
-1. "Derivado" · Andrés · "Reclamo: lo atiende la dueña" · 4 días.
-2. "Alta" · Colegio Los Pinos · "Empresa · 45 u. · S/ 3,825 · entrega en 9 d" · 9 días.
-3. "Alta" · Inversiones Andinas SAC · "Empresa · 30 u. · S/ 2,400 · ya compró antes" · 21 días.
-4. "Derivado" · Estudio Contable Ríos · "Empresa · 150 u. · más de 100, lo negocias tú" · 35 días.
-5. "Alta" · Clínica Sol · "Empresa · 18 u. · S/ 1,080" · 45 días.
+Debe pasar: hay 5 pedidos. Los que llegaron por Mermín en las últimas 24 horas van primero, del más nuevo al más antiguo. Los 6 pedidos "Ejemplo" cuentan como recién llegados, así que el orden es:
+1. "Alta" · Inversiones Andinas SAC · "Empresa · 30 u. · S/ 2,400 · ya compró antes" · 21 días (llegó hace unos 25 minutos).
+2. "Derivado" · Estudio Contable Ríos · "Empresa · 150 u. · más de 100, lo negocias tú" · 35 días.
+3. "Alta" · Colegio Los Pinos · "Empresa · 45 u. · S/ 3,825 · entrega en 9 d" · 9 días.
+4. "Alta" · Clínica Sol · "Empresa · 18 u. · S/ 1,080" · 45 días.
+5. "Derivado" · Andrés · "Reclamo: lo atiende la dueña" · 4 días (el más antiguo de los 5).
+
+Lucía no aparece: su pedido es "Automático".
 
 Todos llevan la etiqueta gris "Ejemplo" y los botones "Ver" y "Confirmar".
 
@@ -337,7 +344,7 @@ Debe pasar:
 2. Debajo dice "Alta" y "¿Por qué? Empresa · 18 u. · S/ 1,080".
 3. También se ven: Cliente "Clínica Sol", Ocasión "Navidad", Cantidad "18 u.", Monto "S/ 1,080", Ganancia estimada "S/ 540", Entrega "1 dic · 45 días", Personalización "No" y el resumen "Box navideño para el área administrativa."
 4. Al tocar "Confirmar" aparece el aviso "Pedido confirmado". El botón cambia a "Confirmado" y ya no se puede tocar. El campo Estado del panel dice "Confirmado".
-5. En Inicio, Clínica Sol ya no está en "Atiende primero".
+5. En Inicio, Clínica Sol ya no está en "Atiende primero". Su lugar lo toma un pedido urgente de la hoja de ventas (por ejemplo "Cliente 216", con entrega cercana). Ese pedido no tiene botón "Confirmar", porque viene del histórico.
 
 Si no pasa: captura del panel.
 
@@ -501,7 +508,7 @@ Si no pasa: captura.
 
 ### Catálogo
 
-Haz esta sección al final de la sección 3. Después de subir un catálogo, recarga la página (ver "Diferencias conocidas", punto 4).
+Haz esta sección al final de la sección 3. Después de subir un catálogo, recarga la página (ver "Diferencias conocidas", punto 2).
 
 [ ] 3.19 Catálogo activo
 
@@ -687,19 +694,22 @@ Si no pasa: captura.
 
 [ ] 3.29 Volver a los valores iniciales
 
-Dónde: cualquier pantalla.
+Dónde: Ajustes, barra de abajo.
 
 Haz esto:
-1. Recarga la página (F5 o Cmd + R).
-2. Ve a Ajustes.
+1. Toca "Restaurar valores".
+2. El botón cambia a "Toca otra vez para restaurar". Tócalo de nuevo antes de 4 segundos.
+3. Revisa los campos sin recargar la página.
 
 Debe pasar:
-1. "Unidades para prioridad alta" vuelve a 30.
-2. El saludo vuelve a "¡Hola! Soy Mermín, el asistente de ITS WOOD."
-3. "Mostrar promoción" vuelve a estar apagado.
-4. La campana vuelve a 2.
+1. Con el primer toque no cambia nada: solo pide confirmar. Si esperas 4 segundos, vuelve a decir "Restaurar valores".
+2. Con el segundo toque aparece el aviso "Valores restaurados", "Volvió la configuración inicial. Mermín ya la usa."
+3. "Unidades para prioridad alta" vuelve a 30.
+4. El nombre vuelve a "Mermín" y el saludo a "¡Hola! Soy Mermín, el asistente de ITS WOOD."
+5. "Mostrar promoción" vuelve a estar apagado y el tiempo "antes" queda vacío.
+6. Los pedidos y avisos que creaste en la demo no se borran. Para borrar también eso, recarga la página (F5 o Cmd + R).
 
-Nota: no existe un botón "Restaurar valores". El botón "Descartar" solo deshace lo que aún no guardaste.
+El botón "Descartar" es otra cosa: solo deshace lo que aún no guardaste.
 
 Si no pasa: captura.
 
@@ -799,7 +809,7 @@ Haz esto:
 
 Debe pasar:
 1. En la URL de Vercel (con la dirección de la landing configurada), los dos llevan a la landing de Priora.
-2. En http://localhost:5173/app, los dos te dejan en la misma app, en Inicio. Es normal: ver "Diferencias conocidas", punto 2.
+2. En http://localhost:5173/app, los dos te dejan en la misma app, en Inicio. Es normal: ver "Diferencias conocidas", punto 1.
 
 Si no pasa: anota la dirección a la que te llevó.
 
@@ -856,22 +866,21 @@ Dirección usada (localhost o Vercel): ______________________
 
 Son cosas que funcionan distinto a lo pedido, o que todavía no están. No son errores de quien verifica.
 
-1. Un pedido nuevo de prioridad alta no siempre sale en "Atiende primero". El recuadro muestra solo 5 pedidos y los ordena por fecha de entrega. El escenario "Empresa · 30 unidades" entrega el 15 de diciembre y queda 7.º, fuera de los 5. Sí aparece en Pedidos, en la campana y en el aviso.
-2. Sin la dirección de la landing configurada, el logo y "Volver a Priora" no llevan a la landing: te dejan en la misma app. En Vercel hay que configurar esa dirección (se llama VITE_LANDING_URL).
-3. En Ajustes no hay botón para volver a los valores de fábrica. En modo ejemplo, eso se hace recargando la página, y al recargar se borra todo lo hecho en la demo.
-4. Después de subir un catálogo nuevo, Mermín ya no sugiere productos (la lista de productos sale vacía) hasta que recargas la página.
-5. "Hablar con la dueña", los reclamos y los pedidos de descuento solo crean un aviso, no un pedido. El aviso llega hasta 10 segundos después y lleva a Pedidos en general, no a un pedido.
-6. El aviso de pedidos con prioridad automática siempre dice "Nuevo pedido resuelto por Mermín", aunque cambies el nombre del asistente.
-7. Si cambias el saludo o la promoción con una conversación en curso, esa conversación no cambia. Hay que entrar de nuevo a Mermín o tocar "Reiniciar conversación".
-8. En modo ejemplo, el chat no usa inteligencia artificial: sigue una conversación guiada. Si escribes algo fuera del guion, Mermín responde "Esa no la sé…" o te pide el dato de nuevo.
-9. Algunos pedidos de la hoja muestran monto "S/ 0", porque en la hoja original no tenían precio.
-10. En la vista previa del catálogo, una fila con el precio mal escrito se muestra con "S/ 0" (igual se marca el error).
-11. En Datos, en modo ejemplo, una carpeta de Drive siempre da "Error" (salvo si eliges "Catálogo"). Sirve para ver cómo se muestra un error.
-12. El correo de la cuenta de servicio de Datos es de ejemplo. Una cuenta de servicio es el correo con el que el servidor lee las hojas de Google.
-13. Algunos números cambian con el día: "Faltan", "Inactivos" y las prioridades que dependen de una fecha cercana.
-14. El "tiempo de primera respuesta" de modo ejemplo cambia un poco después de cada conversación (por ejemplo, de "3 s" a "2 s").
-15. Todavía no hay una URL de Vercel publicada. Además, el archivo `.vercelignore` de la landing podría ocultar archivos que la app necesita. Si la publicación falla, ese es el primer lugar a revisar.
-16. Lo que no se construyó a propósito, porque así lo pide el alcance de la demo: no hay inicio de sesión, no se envían mensajes ni campañas reales, no hay WhatsApp real, no se agrupa por edad, no hay precios por volumen ni plazos de producción.
+1. Sin la dirección de la landing configurada, el logo y "Volver a Priora" no llevan a la landing: te dejan en la misma app. En Vercel hay que configurar esa dirección (se llama VITE_LANDING_URL).
+2. Después de subir un catálogo nuevo, Mermín ya no sugiere productos (la lista de productos sale vacía) hasta que recargas la página.
+3. "Hablar con la dueña", los reclamos y los pedidos de descuento solo crean un aviso, no un pedido. El aviso llega hasta 10 segundos después y lleva a Pedidos en general, no a un pedido.
+4. Algunos textos todavía dicen "Mermín" aunque cambies el nombre del asistente: el origen "Mermín" en Pedidos y en el CSV, "Fuente: registros de Mermín." en Inicio, la ayuda de Ajustes → Medición y el resumen de un pedido de ejemplo. El menú, el chat, los títulos y los avisos sí usan el nombre nuevo.
+5. Si cambias el saludo o la promoción con una conversación en curso, esa conversación no cambia. Hay que entrar de nuevo a Mermín o tocar "Reiniciar conversación".
+6. En modo ejemplo, el chat no usa inteligencia artificial: sigue una conversación guiada. Si escribes algo fuera del guion, Mermín responde "Esa no la sé…" o te pide el dato de nuevo.
+7. Algunos pedidos de la hoja muestran monto "S/ 0", porque en la hoja original no tenían precio.
+8. En la vista previa del catálogo, una fila con el precio mal escrito se muestra con "S/ 0" (igual se marca el error).
+9. En Datos, en modo ejemplo, una carpeta de Drive siempre da "Error" (salvo si eliges "Catálogo"). Sirve para ver cómo se muestra un error.
+10. El correo de la cuenta de servicio de Datos es de ejemplo. Una cuenta de servicio es el correo con el que el servidor lee las hojas de Google.
+11. Algunos números cambian con el día: "Faltan", "Inactivos" y las prioridades que dependen de una fecha cercana.
+12. El "tiempo de primera respuesta" de modo ejemplo cambia un poco después de cada conversación (por ejemplo, de "3 s" a "2 s").
+13. Todavía no hay una URL de Vercel publicada.
+14. "Atiende primero" pone arriba lo que llegó por Mermín en las últimas 24 horas, aunque otro pedido entregue antes. Por eso, al abrir la app, el reclamo de Andrés (entrega en 4 días) aparece 5.º.
+15. Lo que no se construyó a propósito, porque así lo pide el alcance de la demo: no hay inicio de sesión, no se envían mensajes ni campañas reales, no hay WhatsApp real, no se agrupa por edad, no hay precios por volumen ni plazos de producción.
 
 ### Datos marcados [SUPUESTO]
 
