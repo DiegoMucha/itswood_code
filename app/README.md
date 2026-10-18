@@ -18,7 +18,7 @@ Sin `VITE_API_URL` la app arranca en **Modo ejemplo** (se ve en la barra superio
 
 ## Variables de entorno
 
-Copia `.env.example` a `.env.local`:
+Copia `env.example` a `.env.local` (se llama así, sin punto, para que no parezca un `.env` real en el repo):
 
 | Variable | Para qué |
 |---|---|
