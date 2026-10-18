@@ -9,3 +9,9 @@ ref/
 .env
 .env.*
 node_modules/
+
+# App web (app/)
+dist/
+.vercel
+*.zip
+!.env.example
