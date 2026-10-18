@@ -12,7 +12,7 @@
 .itemDetalle { font-size: .82rem; color: var(--tinta-suave); }
 .itemAcciones { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
 .dias { display: flex; flex-direction: column; align-items: center; line-height: 1; margin-right: .25rem; min-width: 2.5rem; }
-.dias strong { font-family: var(--fuente-titulo); font-size: 1.5rem; font-weight: 500; }
+.dias strong { font-size: 1.5rem; font-weight: var(--peso-ligero); }
 .dias small { font-size: .7rem; color: var(--tinta-suave); }
 
 .periodo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; }
@@ -23,15 +23,15 @@
 .metrica header { display: flex; align-items: flex-start; gap: .4rem; color: var(--taupe-oscuro); }
 .metrica header svg:first-child { flex-shrink: 0; margin-top: .1rem; }
 .metrica h3 { flex: 1; margin: 0; font-size: .82rem; color: var(--tinta-suave); font-weight: 700; }
-.valor { font-family: var(--fuente-titulo); font-size: 1.9rem; margin: .2rem 0 0; line-height: 1.1; }
-.valor small { font-family: var(--fuente); font-size: .8rem; color: var(--tinta-suave); }
+.valor { font-weight: var(--peso-ligero); letter-spacing: -0.03em; font-size: 1.9rem; margin: .2rem 0 0; line-height: 1.1; }
+.valor small { font-weight: var(--peso-normal); letter-spacing: 0; font-size: .8rem; color: var(--tinta-suave); }
 .sub { font-size: .82rem; margin: 0; }
 .fuente { font-size: .7rem; color: var(--tinta-suave); margin: auto 0 0; padding-top: .4rem; }
 .sparkline { height: 40px; }
 
 .graficos { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
 .grafico { padding: 1.1rem; min-width: 0; }
-.grafico h3 { font-family: var(--fuente-titulo); font-size: 1.1rem; font-weight: 500; margin-bottom: .2rem; }
+.grafico h3 { font-size: var(--texto-lg); font-weight: var(--peso-medio); margin-bottom: .2rem; }
 .grafico > p { font-size: .82rem; }
 .graficoAncho { grid-column: 1 / -1; }
 .apilada { display: flex; gap: 2px; height: 44px; margin: .8rem 0 .6rem; border-radius: 8px; overflow: hidden; }

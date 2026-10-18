@@ -20,7 +20,7 @@ const ventas = obtenerVentasHistoricas();
 // Recharts pinta atributos SVG: ahí no funcionan las variables CSS.
 const SERIE_1 = '#a0521f';
 const TINTA = '#3E2F25';
-const TINTA_SUAVE = '#6b5a4c';
+const TINTA_SUAVE = '#5E4A3B';
 
 function TooltipSoles({ active, payload, label, etiqueta }) {
   if (!active || !payload?.length) return null;

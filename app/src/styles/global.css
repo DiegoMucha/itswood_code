@@ -16,10 +16,11 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3 { font-family: var(--fuente-titulo); font-weight: 500; margin: 0 0 .4em; letter-spacing: -0.01em; }
+/* Como la landing: una sola familia, títulos ligeros y un poco apretados */
+h1, h2, h3 { font-weight: var(--peso-ligero); line-height: 1.12; margin: 0 0 .4em; letter-spacing: -0.02em; }
 h1 { font-size: clamp(1.5rem, 2.4vw, 2rem); }
 h2 { font-size: 1.2rem; }
-h3 { font-size: 1rem; font-family: var(--fuente); font-weight: 700; }
+h3 { font-size: 1rem; font-weight: var(--peso-medio); letter-spacing: -0.01em; }
 p { margin: 0 0 .6em; }
 a { color: var(--cobre-oscuro); }
 button, input, select, textarea { font: inherit; color: inherit; }

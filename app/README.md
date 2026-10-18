@@ -101,4 +101,4 @@ Todos esperan confirmación de la dueña:
 - Orden de Pedidos: primero lo vivo de Mermín, luego lo abierto del histórico y al final lo entregado/enviado; dentro de cada bloque, derivado y alta → media → automático, luego fecha de entrega y luego valor.
 - Sin login, sin envío real de mensajes ni campañas ("Copiar mensaje"), sin WebSockets.
 - En modo ejemplo lo que se guarda (Ajustes, pedidos confirmados, catálogo subido) vive en memoria: se pierde al recargar.
-- Tipografía: Manrope + Fraunces (Google Fonts). Este repo no tiene `landing/`, así que los tokens salen del brief; si la landing tiene `assets/styles/tokens.css`, cópialo a `src/styles/tokens.css`.
+- Tipografía y tokens: los de la landing (`landing/assets/styles/tokens.css`, Manrope 300/400/600; la app suma 700 para negritas). La primera parte de `src/styles/tokens.css` es copia exacta; debajo van solo los extras de la app (colores de estado, series de gráficos y alias).
