@@ -349,6 +349,44 @@ test('campañas: la vista previa no envía; enviar exige confirmar y respeta fre
   assert.equal(e.correos.length, 1, 'la vista previa diaria no envía nada');
 });
 
+// ---------- 6. Reportes al negocio (flujo [10]) ----------
+
+test('reportes: el diario sale a la hora configurada con leads por prioridad, ventas y las 5 métricas', async () => {
+  const { reportes } = require('../sim/pipeline');
+  // 15:00 UTC = 10:00 en Lima.
+  const e = entorno({ config: [...CONFIG_DEMO, { clave: 'avisos_email', valor: 'duena@itswood.example' }, { clave: 'hora_resumen_diario', valor: '10:00' }] });
+  conDrive(e);
+  await sincronizarDrive(e);
+  await conversar(e, ANA, PEDIDO_PERSONA('posataza koi', 50, '3'));
+  e.correos = [];
+  e.enviarCorreo = async c => { e.correos.push(c); };
+  const r = await reportes({ tipo: 'diario' }, e);
+  assert.equal(e.correos[0].to, 'duena@itswood.example');
+  assert.equal(r.asunto, 'Mermín · Resumen del día 17/10/2026');
+  assert.match(r.texto, /Leads: 1 \(🔴 ALTA 1 · MEDIA 0 · BAJA 0\)/);
+  assert.match(r.texto, /🔴 Ana — Posataza para cafe - Koi × 50 — S\/ 2,250\.00 \(ganancia S\/ 1,350\.00\)/);
+  assert.match(r.texto, /1\. Tiempo de primera respuesta: 180 min antes/);
+  assert.match(r.texto, /4\. Ticket promedio: S\/ 713\.75 \(4 pedidos\)/);
+  assert.match(r.texto, /5\. Clientes registrados: 7/);
+
+  const fuera = entorno({ config: [{ clave: 'avisos_email', valor: 'duena@itswood.example' }, { clave: 'hora_resumen_diario', valor: '19:00' }] });
+  assert.equal(await reportes({ tipo: 'diario' }, fuera), null, 'a otra hora no se envía');
+});
+
+test('reportes: el semanal compara con la semana anterior y lista los segmentos por activar', async () => {
+  const { reportes } = require('../sim/pipeline');
+  // Lunes 19/10/2026 08:00 en Lima: informa del 12 al 18 de octubre.
+  const e = entorno({ inicio: '2026-10-19T13:00:00.000Z', config: [...CONFIG_DEMO, { clave: 'avisos_email', valor: 'a@x.example, b@x.example' }] });
+  conDrive(e);
+  await sincronizarDrive(e);
+  const r = await reportes({ tipo: 'semanal' }, e);
+  assert.equal(r.destinos, 'a@x.example,b@x.example');
+  assert.match(r.texto, /Resumen semanal — ITS WOOD \(12\/10\/2026 al 18\/10\/2026\)/);
+  assert.match(r.texto, /4\. Ticket promedio: — \(0 pedidos\) \(semana anterior: S\/ 107\.50\)/, 'P005 y P008 fueron la semana previa');
+  assert.match(r.texto, /Segmentos con más clientes por activar/);
+  assert.match(r.texto, /DORMIDO: 1 cliente\(s\) — POST \/campanas\/DORMIDO\/preview/);
+});
+
 // ---------- 7. Las 5 métricas ----------
 
 const PEDIDO_EMPRESA = ['Hola', '1', 'Acme SAC', 'Luis', 'Fin de año', 'roma', '1', '20', 'no', 'mañana', 'Av. Javier Prado 100, San Isidro', 'mañanas', '1'];

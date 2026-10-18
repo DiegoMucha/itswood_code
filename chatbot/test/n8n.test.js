@@ -118,6 +118,24 @@ test('flujo Campañas: a quién le toca y filas con el error de cada correo', ()
   assert.match(filas[0].detalle, /SMTP caído/);
 });
 
+test('flujo Reportes: el semanal se arma con las pestañas leídas; el diario espera su hora', () => {
+  const { flujoReportes } = require('../n8n/build');
+  const flujo = flujoReportes();
+  const tablas = ['BOT_CONFIG', 'BOT_EVENTOS', 'BOT_SOLICITUDES', 'BOT_CONVERSACIONES', 'BOT_VENTAS', 'BOT_CLIENTES', 'BOT_CLIENTES_FUENTE', 'BOT_PRODUCTOS', 'BOT_FIDELIZACION', 'BOT_CAMPANAS'];
+  const datos = Object.fromEntries(tablas.map(t => [`Leer ${t}`, [{}]]));
+  // El nodo usa la hora real: el resumen diario se programa para la hora siguiente, así nunca coincide.
+  const { horaLocal } = require('../src/reportes');
+  const otraHora = `${String((horaLocal(new Date().toISOString()) + 1) % 24).padStart(2, '0')}:00`;
+  datos['Leer BOT_CONFIG'] = [{ clave: 'avisos_email', valor: 'duena@itswood.example' }, { clave: 'hora_resumen_diario', valor: otraHora }];
+  datos['Lunes 08:00'] = [{}];
+  const [r] = ejecutarCodigo(flujo, 'Armar reporte', datos);
+  assert.equal(r.tipo, 'semanal');
+  assert.equal(r.destinos, 'duena@itswood.example');
+  delete datos['Lunes 08:00'];
+  datos['Cada hora'] = [{}];
+  assert.deepEqual(ejecutarCodigo(flujo, 'Armar reporte', datos), [], 'fuera de la hora del resumen no sale nada');
+});
+
 test('nodo Decidir acción del formulario', () => {
   const flujo = flujoHumano();
   const datos = { 'Formulario de atención': [{ 'WhatsApp del cliente': '51987000001', 'Acción': 'Tomar caso', 'Mensaje al cliente': '', 'Responsable': 'Carla' }] };

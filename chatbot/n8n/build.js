@@ -33,7 +33,7 @@ function cargarConfig(conLocal) {
     // cuenta de servicio, que la API muestra para que el negocio comparta la carpeta.
     driveFolderId: '', correoServicio: '',
     // Campañas [9]: remitente de los correos.
-    idCampanas: '', correoRemitente: '',
+    idCampanas: '', correoRemitente: '', idReportes: '',
     // Credenciales ya creadas en n8n (solo id y nombre; los secretos quedan en n8n).
     credGoogleId: '', credGoogleNombre: '', credPruebaId: '', credPruebaNombre: '', credApiId: '', credApiNombre: '',
   };
@@ -963,6 +963,40 @@ return [{ json: {
   return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
 }
 
+// ---------- 10. Reportes al negocio ----------
+// Corre cada hora y manda el resumen diario a la hora de BOT_CONFIG.hora_resumen_diario; los lunes a las 08:00
+// manda el semanal. Destinos: BOT_CONFIG.avisos_email. El aviso inmediato de un lead ALTA sale por el flujo [1].
+
+function flujoReportes() {
+  const f = crearFlujo('Mermín - Reportes', CONFIG.idReportes);
+  const x = i => i * 200;
+  f.nodo('Cada hora', 'n8n-nodes-base.scheduleTrigger', 1.2, [x(0), 200], { rule: { interval: [{ field: 'cronExpression', expression: '0 * * * *' }] } });
+  f.nodo('Lunes 08:00', 'n8n-nodes-base.scheduleTrigger', 1.2, [x(0), 420], { rule: { interval: [{ field: 'cronExpression', expression: '0 8 * * 1' }] } });
+  configuracion(f, [x(1), 300], ['sheetId', 'correoRemitente']);
+  const lecturas = PANEL_TABLAS.map(([clave, tabla], i) => [clave, sheetsLeer(f, `Leer ${tabla}`, [x(2 + i), 300], tabla)]);
+  codigo(f, 'Armar reporte', [x(2 + lecturas.length), 300], ['config.js', 'metricas.js', 'fidelizacion.js', 'reportes.js'], `
+${FILAS_DE}
+const ahora = new Date().toISOString();
+const leer = ${JSON.stringify(Object.fromEntries(lecturas))};
+const d = Object.fromEntries(Object.entries(leer).map(([k, nodo]) => [k, filasDe(nodo).filter(r => r && Object.keys(r).length)]));
+const semanal = filasDe('Lunes 08:00').length > 0;
+if (!semanal && !tocaResumenDiario(leerConfig(d.config), ahora)) return [];
+const r = semanal ? resumenSemanal(d, ahora) : resumenDiario(d, ahora);
+return r.destinos ? [{ json: r }] : [];`, { notes: 'Sin avisos_email en BOT_CONFIG no envía nada.' });
+  f.nodo('Enviar reporte', 'n8n-nodes-base.emailSend', 2.1, [x(3 + lecturas.length), 300], {
+    fromEmail: expr(`${CFG}.correoRemitente`),
+    toEmail: expr('$json.destinos'),
+    subject: expr('$json.asunto'),
+    emailFormat: 'text',
+    text: expr('$json.texto'),
+    options: {},
+  }, { notes: 'Credencial SMTP. Por WhatsApp haría falta una plantilla aprobada por Meta.' });
+  f.conectar('Cada hora', 'Configuración');
+  f.conectar('Lunes 08:00', 'Configuración');
+  f.cadena('Configuración', ...lecturas.map(([, nodo]) => nodo), 'Armar reporte', 'Enviar reporte');
+  return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
+}
+
 // ---------- validación y escritura ----------
 
 function validar(flujo) {
@@ -995,6 +1029,7 @@ function escribirFlujos(carpeta) {
     '7_api.json': flujoApi(),
     '8_sincronizar_drive.json': flujoSync(),
     '9_campanas.json': flujoCampanas(),
+    '10_reportes.json': flujoReportes(),
   };
   for (const [archivo, flujo] of Object.entries(flujos)) {
     validar(flujo);
@@ -1040,4 +1075,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { flujoProcesar, flujoEntrada, flujoHumano, flujoErrores, flujoPrueba, flujoConfirmarOrden, flujoApi, flujoSync, flujoCampanas };
+module.exports = { flujoProcesar, flujoEntrada, flujoHumano, flujoErrores, flujoPrueba, flujoConfirmarOrden, flujoApi, flujoSync, flujoCampanas, flujoReportes };

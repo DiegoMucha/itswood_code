@@ -14,6 +14,7 @@ const { leerConfig } = require('../src/config');
 const { elegirHojaFuente, prepararSync, filaErrorSync } = require('../src/sync');
 const { responderPanel } = require('../src/panel');
 const { aQuienLeToca, filasCampana, SEGMENTOS_FIDELIZACION } = require('../src/fidelizacion');
+const { resumenDiario, resumenSemanal, tocaResumenDiario } = require('../src/reportes');
 
 function elegir(obj, columnas) { return Object.fromEntries(columnas.map(c => [c, obj[c] === undefined || obj[c] === null ? '' : obj[c]])); }
 
@@ -117,6 +118,16 @@ async function confirmarOrden({ solicitud_id, simular }, entorno) {
     resultados.push({ proveedor: envio.proveedor_nombre, estado: fila.estado });
   }
   return { ...r, resultados };
+}
+
+// Flujo "Mermín - Reportes": tipo 'diario' o 'semanal'. El diario solo sale a la hora de hora_resumen_diario.
+async function reportes({ tipo }, entorno) {
+  const ahora = reloj(entorno);
+  const d = datosPanel(entorno.hoja);
+  if (tipo !== 'semanal' && !tocaResumenDiario(leerConfig(d.config), ahora)) return null;
+  const r = tipo === 'semanal' ? resumenSemanal(d, ahora) : resumenDiario(d, ahora);
+  if (r.destinos && entorno.enviarCorreo) await entorno.enviarCorreo({ to: r.destinos, asunto: r.asunto, texto: r.texto });
+  return r;
 }
 
 // Las mismas pestañas que lee la rama del panel en el flujo [7].
@@ -247,4 +258,4 @@ async function accionHumana(formulario, entorno) {
   }
 }
 
-module.exports = { procesarMensaje, recibirWebhook, accionHumana, confirmarOrden, llamarApi, sincronizarDrive, campanas };
+module.exports = { procesarMensaje, recibirWebhook, accionHumana, confirmarOrden, llamarApi, sincronizarDrive, campanas, reportes };
