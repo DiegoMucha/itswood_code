@@ -40,6 +40,9 @@ export default function NotificationDrawer({ abierto, cerrar }) {
       <aside ref={panel} className={`${s.panel} vidrio vidrio-opaco`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Notificaciones">
         <div className={s.cabeza}>
           <h2>Notificaciones</h2>
+          {notificaciones.some((n) => !n.leido) && (
+            <button className="btn btn-chico" onClick={() => notificaciones.filter((n) => !n.leido).forEach((n) => marcarLeida(n.id))}>Marcar todo como leído</button>
+          )}
           <button className="btn btn-icono" onClick={cerrar} aria-label="Cerrar notificaciones"><X size={18} /></button>
         </div>
         {notificaciones.length === 0 && <p className="muted">No tienes avisos. Cuando entre un pedido importante, te avisamos aquí.</p>}

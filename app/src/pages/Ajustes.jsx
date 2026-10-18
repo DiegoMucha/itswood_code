@@ -17,6 +17,11 @@ const DERIVAR = [
   ['pide_persona', 'Pide hablar con una persona'],
 ];
 
+const reemplazarPalabra = (texto, viejo, nuevo) => {
+  const escapado = viejo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return texto.replace(new RegExp(`(?<!\\p{L})${escapado}(?!\\p{L})`, 'gu'), nuevo);
+};
+
 export default function Ajustes() {
   const { config, guardarConfig, modoEjemplo, toast } = useApp();
   const [f, setF] = useState(() => structuredClone(config));
@@ -38,7 +43,7 @@ export default function Ajustes() {
   const cambiarNombre = (nuevo) => setF((x) => ({
     ...x,
     asistente: nuevo,
-    textos: { ...x.textos, saludo: x.asistente && nuevo ? x.textos.saludo.split(x.asistente).join(nuevo) : x.textos.saludo },
+    textos: { ...x.textos, saludo: x.asistente && nuevo ? reemplazarPalabra(x.textos.saludo, x.asistente, nuevo) : x.textos.saludo },
   }));
   const entero = (v) => (v === '' ? '' : Math.round(Number(v)));
   const err = (k) => errores[k];

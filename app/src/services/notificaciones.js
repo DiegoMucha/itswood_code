@@ -3,7 +3,12 @@ import { demo } from './demo/store.js';
 
 // Ruta propuesta por el frontend (ver docs/API_CONTRATO.md).
 export async function listarNotificaciones() {
-  return conRespaldo(() => pedir('/notificaciones'), async () => structuredClone(demo.notificaciones), { rutaPropuesta: true });
+  return conRespaldo(
+    () => pedir('/notificaciones'),
+    // El resumen diario solo aparece si la dueña lo tiene activado en Ajustes.
+    async () => structuredClone(demo.notificaciones.filter((n) => n.tipo !== 'resumen' || demo.config.notificaciones?.resumen_diario !== false)),
+    { rutaPropuesta: true },
+  );
 }
 
 export async function marcarLeida(id) {

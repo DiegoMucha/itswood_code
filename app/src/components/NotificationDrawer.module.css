@@ -3,7 +3,8 @@
   position: absolute; top: .75rem; right: .75rem; bottom: .75rem; width: min(380px, calc(100vw - 1.5rem));
   padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: .75rem;
 }
-.cabeza { display: flex; align-items: center; justify-content: space-between; }
+.cabeza { display: flex; align-items: center; gap: .5rem; }
+.cabeza h2 { flex: 1; }
 .cabeza h2 { margin: 0; }
 .lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
 .aviso {
