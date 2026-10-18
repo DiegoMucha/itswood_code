@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  Home, ListOrdered, MessageCircle, HeartHandshake, Package, Database, Settings, Bell, Menu, X, ArrowLeft, FlaskConical,
+  Home, ListOrdered, MessageCircle, HeartHandshake, Package, Database, Settings, Bell, Menu, X, ArrowLeft, FlaskConical, LogOut,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import { sesionActual, cerrarSesion } from '../services/sesion.js';
 import NotificationDrawer from './NotificationDrawer.jsx';
 import Toasts from './Toasts.jsx';
 import s from './Layout.module.css';
@@ -59,6 +60,8 @@ export default function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [avisosAbiertos, setAvisosAbiertos] = useState(false);
   const { pathname } = useLocation();
+  // Solo hay sesión cuando el login está activo; sin login (como antes) no se muestra el botón.
+  const sesion = sesionActual();
   const noLeidas = notificaciones.filter((n) => !n.leida).length;
   const actual = [...NAV].reverse().find((n) => pathname.startsWith(n.to));
 
@@ -107,6 +110,11 @@ export default function Layout() {
               <Bell size={18} />
               {noLeidas > 0 && <span className={s.contador} aria-hidden="true">{noLeidas}</span>}
             </button>
+            {sesion && (
+              <button className="btn btn-chico" onClick={() => cerrarSesion('salir')} aria-label={`Cerrar sesión de ${sesion.correo}`}>
+                <LogOut size={14} aria-hidden="true" /> Cerrar sesión
+              </button>
+            )}
           </div>
         </header>
         <main id="contenido" className={s.main} tabIndex={-1}>
