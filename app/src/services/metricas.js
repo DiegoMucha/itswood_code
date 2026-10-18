@@ -10,7 +10,7 @@ export async function obtenerMetricasChat(periodo = 'todo') {
     () => pedir(`/metricas?periodo=${encodeURIComponent(periodo)}`),
     async () => {
       const base = { conversaciones: 42, con_pedido: 15, tiempos_seg: [3, 4, 2, 5, 3] };
-      const conv = demo.conversaciones;
+      const conv = demo.conversaciones.filter((c) => c.inicio);
       const tiempos = [...base.tiempos_seg, ...conv.map((c) => c.primera_respuesta_seg).filter((t) => t != null)];
       const total = base.conversaciones + conv.length;
       const conPedido = base.con_pedido + conv.filter((c) => c.pedido_id).length;
