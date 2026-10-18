@@ -10,6 +10,7 @@ import { resumenSegmentos, recomendacionesDe } from './segmentos.js';
 import { nuevaFuente, sincronizar } from './fuentes.js';
 import { formatoSoles, hoyISO } from './formato.js';
 import { montoPedido } from './prioridad.js';
+import { ipDe } from './auth.js';
 
 const LIMITE_JSON = 1024 * 1024;
 const LIMITE_ARCHIVO = 5 * 1024 * 1024;
@@ -90,9 +91,25 @@ function resumenDiario(almacen) {
   agregarNotificacion(almacen, { tipo: 'resumen_diario', titulo: 'Resumen del día', texto: `${consultas} consultas, ${deHoy.length} pedidos, ${formatoSoles(monto)}`, enlace: '/app' });
 }
 
-export function crearApp({ almacen, google = null, origenes = ['*'], version = '0.1.0' }) {
+// Rutas que no piden token aunque el login esté activo: el chat lo usa el cliente final, no la dueña.
+const PUBLICAS = new Set(['GET /health', 'POST /auth/login', 'POST /chat']);
+
+/** Token de "Authorization: Bearer <token>". */
+const tokenDe = (req) => (String(req.headers.authorization || '').match(/^Bearer\s+(\S+)$/i) || [])[1] || null;
+
+export function crearApp({ almacen, google = null, origenes = ['*'], version = '0.1.0', auth = null }) {
   const rutas = [
-    ['GET', /^\/health$/, () => ({ ok: true, version, almacen: almacen.modo, google: Boolean(google), ultimo_error: almacen.ultimoError })],
+    ['GET', /^\/health$/, () => ({ ok: true, version, almacen: almacen.modo, google: Boolean(google), auth: Boolean(auth), ultimo_error: almacen.ultimoError })],
+    ['POST', /^\/auth\/login$/, async (req) => {
+      if (!auth) throw new ErrorHttp(404, 'El login no está activo en este backend (faltan ADMIN_EMAIL y ADMIN_PASSWORD)');
+      const r = auth.login(await leerJson(req), ipDe(req));
+      if (!r.ok) throw new ErrorHttp(r.status, r.error);
+      return { token: r.token, expira_en: r.expira_en };
+    }],
+    ['GET', /^\/auth\/yo$/, (req) => {
+      if (!auth) throw new ErrorHttp(404, 'El login no está activo en este backend');
+      return auth.verificar(tokenDe(req));
+    }],
     ['GET', /^\/config$/, () => ({ ...almacen.datos.config, correo_servicio: google?.correo || null })],
     ['PATCH', /^\/config$/, async (req) => {
       const r = aplicarCambios(almacen.datos.config, await leerJson(req));
@@ -185,7 +202,7 @@ export function crearApp({ almacen, google = null, origenes = ['*'], version = '
     if (origen && permitido(origen)) {
       Object.assign(cabeceras, {
         'Access-Control-Allow-Origin': origenes.includes('*') ? '*' : origen, Vary: 'Origin',
-        'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Max-Age': '600',
       });
     }
     const responder = (status, cuerpo) => {
@@ -200,6 +217,9 @@ export function crearApp({ almacen, google = null, origenes = ['*'], version = '
       if (!coinciden.length) throw new ErrorHttp(404, `No existe la ruta ${ruta}`);
       const r = coinciden.find(([metodo]) => metodo === req.method);
       if (!r) throw new ErrorHttp(405, `La ruta ${ruta} acepta ${coinciden.map(([metodo]) => metodo).join(', ')}`);
+      if (auth && !PUBLICAS.has(`${req.method} ${ruta}`) && !auth.verificar(tokenDe(req))) {
+        throw new ErrorHttp(401, 'Inicia sesión para usar el dashboard (falta el token o venció)');
+      }
       const salida = await r[2](req, ruta.match(r[1]), url);
       if (salida && Buffer.isBuffer(salida.archivo)) {
         res.writeHead(200, { ...cabeceras, 'Content-Type': salida.tipo, 'Content-Disposition': `attachment; filename="${salida.nombre}"` });
