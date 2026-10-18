@@ -74,8 +74,9 @@
       </div>
     </div>
 
-    <!-- Curva de luz decorativa (SVG en línea): dos halos desenfocados + un trazo fino nítido -->
-    <div class="hero-visual" aria-hidden="true">
+    <!-- Curva de luz decorativa (SVG en línea): dos halos desenfocados + un trazo fino nítido.
+         Con aceleración gráfica, hero-scene.js la cambia por la escena de Spline, cuya URL vive SOLO en data-spline-url -->
+    <div class="hero-visual" data-spline-url="https://my.spline.design/claritystream-Txg1N81Wzit6iC1CdjTIFz36/" aria-hidden="true">
       <svg class="luz luz-halo-ancho" viewBox="0 0 1440 900" preserveAspectRatio="none" focusable="false">
         <defs>
           <!-- Se desvanece en los dos extremos de la curva -->
@@ -246,5 +247,6 @@
 <script src="assets/content/landing.es.js"></script>
 <script src="assets/scripts/content.js"></script>
 <script src="assets/scripts/main.js"></script>
+<script src="assets/scripts/hero-scene.js" defer></script>
 </body>
 </html>

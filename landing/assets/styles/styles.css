@@ -248,8 +248,7 @@ button:focus-visible {
 
 /* ========================================
    HERO: panel taupe con una curva de luz, como la referencia (ref/img_3.png)
-   Arriba es más oscuro (--hero-profundo) y aclara hacia abajo sin cortes bruscos.
-   Los tonos van más oscuros que la referencia para que el texto claro cumpla AA;
+   Arriba es más oscuro y aclara hacia abajo sin cortes bruscos, con los tonos de la referencia;
    el resplandor bajo la curva va en .hero-visual::before.
 ======================================== */
 
@@ -267,7 +266,7 @@ button:focus-visible {
     text-align: center;
     color: var(--crema-texto);
     background:
-        linear-gradient(180deg, var(--hero-profundo) 0%, #644F40 28%, #6C5745 50%, #7D6855 68%, var(--taupe-oscuro) 84%, #9A8571 100%);
+        linear-gradient(180deg, #978575 0%, #9A8878 30%, #A08E7D 50%, #A99584 68%, #B3A18F 84%, #BCAA98 100%);
 }
 
 .hero a:focus-visible {
@@ -306,7 +305,7 @@ button:focus-visible {
     margin-top: 36px;
 }
 
-/* Capa decorativa: resplandor de fondo + curva de luz */
+/* Capa decorativa: resplandor de fondo + curva de luz y, con aceleración gráfica, la escena de Spline */
 .hero-visual {
     position: absolute;
     inset: 0;
@@ -367,6 +366,42 @@ button:focus-visible {
 @keyframes respirar-suave {
     0%, 100% { opacity: 0.65; }
     50%      { opacity: 0.88; }
+}
+
+/* Escena de Spline (hero-scene.js). Spline escala la cinta según la ALTURA del iframe
+   (mide ~0.7 veces esa altura de largo), así que el iframe es mucho más alto que el hero:
+   1.6 veces el ancho del hero, para que la cinta cruce de borde a borde. La cinta queda
+   un 6% (de la altura del iframe) sobre su centro; se compensa para que caiga en el 76%
+   del hero, bajo los botones. El resto queda recortado, incluida la insignia de Spline.
+   La máscara funde el borde superior. El fondo de la escena (#8F7A66) es más oscuro que el
+   del hero en todos sus canales: con mix-blend-mode: lighten desaparece y solo queda la cinta. */
+.hero-escena {
+    --alto-escena: calc((100vw - 2 * var(--margen-lateral)) * 1.6);
+    position: absolute;
+    left: 0;
+    top: calc(76% - var(--alto-escena) * 0.44);
+    width: 100%;
+    height: var(--alto-escena);
+    border: 0;
+    background: var(--taupe-oscuro);
+    mix-blend-mode: lighten;
+    pointer-events: none;   /* decorativa: no captura el scroll ni el mouse */
+    opacity: 0;
+    transition: opacity 0.8s ease;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 33%, #000 38%);
+    mask-image: linear-gradient(180deg, transparent 0%, transparent 33%, #000 38%);
+}
+
+.hero-visual.has-scene .hero-escena {
+    opacity: 1;
+}
+
+.luz {
+    transition: visibility 0.8s;
+}
+
+.hero-visual.has-scene .luz {
+    visibility: hidden;
 }
 
 
@@ -756,7 +791,7 @@ button:focus-visible {
     color: var(--crema-texto);
     background:
         radial-gradient(60% 60% at 50% 120%, rgba(235, 169, 138, 0.35), transparent 70%),
-        linear-gradient(180deg, var(--hero-profundo), #6B5847);
+        linear-gradient(180deg, #978575, #A69282);
     box-shadow: var(--sombra-vidrio);
 }
 
@@ -871,7 +906,7 @@ button:focus-visible {
     }
 }
 
-/* 900px o menos: la curva de luz va en su propio bloque, bajo los botones */
+/* 900px o menos: sin escena 3D (hero-scene.js no la inserta); la curva de luz va en su propio bloque, bajo los botones */
 @media (max-width: 900px) {
     .hamburger {
         display: inline-grid;
