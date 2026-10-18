@@ -136,6 +136,23 @@ test('flujo Reportes: el semanal se arma con las pestañas leídas; el diario es
   assert.deepEqual(ejecutarCodigo(flujo, 'Armar reporte', datos), [], 'fuera de la hora del resumen no sale nada');
 });
 
+test('flujo API: nodos de PUT /fidelizacion y POST /config/drive', () => {
+  const { flujoApi } = require('../n8n/build');
+  const demo = require('../sim/fuente_demo');
+  const api = flujoApi();
+  const [c] = ejecutarCodigo(api, 'Cambios del dashboard', {
+    'Configuración': [{ ruta: 'fidelizacion-put', cambios: { reglas: [{ segmento: 'VIP', oferta: 'Envío gratis' }] } }],
+    'Leer reglas actuales': [{ segmento: 'VIP', canal: 'WHATSAPP', mensaje: 'Hola {nombre}', oferta: 'X', frecuencia_dias: '10', activo: 'SI' }],
+  });
+  assert.deepEqual(c.filas[0], { segmento: 'VIP', canal: 'WHATSAPP', mensaje: 'Hola {nombre}', oferta: 'Envío gratis', frecuencia_dias: '10', activo: 'SI' });
+  const [carpeta] = ejecutarCodigo(api, 'Carpeta pedida', {}, [{ url: 'https://drive.google.com/drive/folders/1AbC_dEfGhIjKlMn' }]);
+  const [r] = ejecutarCodigo(api, 'Conectar carpeta', {
+    'Carpeta pedida': [carpeta], 'Buscar hojas de la carpeta': demo.ARCHIVOS_CARPETA, 'Configuración': [{ correoServicio: 'bot@x.iam.gserviceaccount.com' }],
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.filas[0].valor, '1AbC_dEfGhIjKlMn');
+});
+
 test('nodo Decidir acción del formulario', () => {
   const flujo = flujoHumano();
   const datos = { 'Formulario de atención': [{ 'WhatsApp del cliente': '51987000001', 'Acción': 'Tomar caso', 'Mensaje al cliente': '', 'Responsable': 'Carla' }] };

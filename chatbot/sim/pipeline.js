@@ -11,8 +11,8 @@ const { PESTANAS: T, COLUMNAS_PAUTAS } = require('../src/hojas');
 const { prepararCotizaciones, identificarProveedor, registrarRespuestaProveedor, COLUMNAS_COTIZACION } = require('../src/ordenes');
 const api = require('../src/api');
 const { leerConfig } = require('../src/config');
-const { elegirHojaFuente, prepararSync, filaErrorSync } = require('../src/sync');
-const { responderPanel } = require('../src/panel');
+const { elegirHojaFuente, prepararSync, filaErrorSync, extraerFolderId, conectarDrive } = require('../src/sync');
+const { responderPanel, cambiosPanel } = require('../src/panel');
 const { aQuienLeToca, filasCampana, SEGMENTOS_FIDELIZACION } = require('../src/fidelizacion');
 const { resumenDiario, resumenSemanal, tocaResumenDiario } = require('../src/reportes');
 
@@ -184,6 +184,25 @@ async function llamarApi({ metodo, ruta, query, body }, entorno) {
     case 'leads': return api.respuestaLeads(hoja.leer(T.solicitudes), v);
     case 'metricas': case 'segmentos': case 'segmento-clientes': case 'recomendacion': case 'audiencia': case 'campana-preview':
       return responderPanel(v, datosPanel(hoja), reloj(entorno));
+    case 'config': case 'fidelizacion':
+      return responderPanel(v, datosPanel(hoja), reloj(entorno));
+    case 'config-put': case 'fidelizacion-put': {
+      const c = cambiosPanel(v);
+      const [tabla, clave] = v.ruta === 'config-put' ? [T.config, 'clave'] : [T.fidelizacion, 'segmento'];
+      for (const fila of c.filas) hoja.guardar(tabla, clave, fila);
+      return { status: c.status, cuerpo: c.cuerpo };
+    }
+    case 'config-drive': {
+      const folderId = extraerFolderId(v.url);
+      const c = conectarDrive({ url: v.url, archivos: folderId ? entorno.drive.listar(folderId) : [], correoServicio: (entorno.config || {}).correoServicio });
+      if (!c.ok) return { status: c.status, cuerpo: { ok: false, error: c.error, correo_servicio: c.correo_servicio } };
+      for (const fila of c.config) hoja.guardar(T.config, 'clave', fila);
+      return { status: 200, cuerpo: { ok: true, ruta: 'config-drive', folder_id: c.folder_id, hoja: c.hoja } };
+    }
+    case 'sync': {
+      const r = await sincronizarDrive(entorno);
+      return { status: r.ok ? 200 : 422, cuerpo: { ok: r.ok, ruta: 'sync', errores: r.errores || [], avisos: r.avisos || [], resumen: r.resumen || '', ultima_sync: r.ok ? r.ahora : '' } };
+    }
     case 'campana-enviar': {
       const r = await campanas({ segmento: v.segmento, enviar: true }, entorno);
       return { status: r.status, cuerpo: r.ok ? { ok: true, ruta: v.ruta, ...r.resultados[0] } : { ok: false, error: r.error } };

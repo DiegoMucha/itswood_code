@@ -560,7 +560,9 @@ const PANEL_TABLAS = [
   ['fidelizacion', T.fidelizacion], ['campanas', T.campanas],
 ];
 const ARCHIVOS_PANEL = ['config.js', 'metricas.js', 'fidelizacion.js', 'panel.js'];
-const RUTAS_PANEL = ['metricas', 'segmentos', 'segmento-clientes', 'recomendacion', 'audiencia', 'campana-preview'];
+const RUTAS_PANEL = ['metricas', 'segmentos', 'segmento-clientes', 'recomendacion', 'audiencia', 'campana-preview', 'config', 'fidelizacion'];
+// Rutas que escriben en el libro o llaman a otro flujo.
+const RUTAS_ESCRITURA = ['config-put', 'fidelizacion-put', 'config-drive', 'sync', 'campana-enviar'];
 
 function flujoApi() {
   const f = crearFlujo('ITS WOOD - API', CONFIG.idApi);
@@ -591,8 +593,8 @@ if (!v.ok) return [{ json: { ruta: 'error', status: v.status, cuerpo: { ok: fals
 if (v.ruta === 'salud') return [{ json: { ruta: 'salud', status: 200, cuerpo: { ok: true, servicio: 'itswood-bot' } } }];
 return [{ json: v }];`;
   METODOS.forEach((m, i) => codigo(f, `Petición ${m}`, [220, 200 + i * 220], ['api.js'], peticion(m)));
-  configuracion(f, [440, 300], ['sheetId']);
-  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads', ...RUTAS_PANEL, 'campana-enviar'];
+  configuracion(f, [440, 300], ['sheetId', 'correoServicio']);
+  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads', ...RUTAS_PANEL, ...RUTAS_ESCRITURA];
   switchRutas(f, 'Enrutar', [660, 300], '$json.ruta', rutas);
 
   // mensaje: el bot responde por HTTP (origen "api"), sin enviar nada por WhatsApp.
@@ -640,6 +642,53 @@ const r = $input.first().json || {};
 if (r.ok === undefined) return [{ json: { status: 500, cuerpo: { ok: false, error: 'El subflujo Campañas no devolvió resultado.' } } }];
 return [{ json: { status: r.status || 200, cuerpo: r.ok ? { ok: true, ruta: 'campana-enviar', ...(r.resultados || [])[0] } : { ok: false, error: r.error } } }];`);
 
+  // config-put / fidelizacion-put: se validan los cambios y se guardan con appendOrUpdate. Las reglas se completan
+  // con las actuales para que un cambio parcial no borre las demás columnas.
+  const Y = 1440;
+  sheetsLeer(f, 'Leer reglas actuales', [880, Y + 120], T.fidelizacion);
+  codigo(f, 'Cambios del dashboard', [1100, Y], ARCHIVOS_PANEL, `
+${FILAS_DE}
+const p = $('Configuración').first().json;
+const c = cambiosPanel(p);
+if (c.ok && p.ruta === 'fidelizacion-put') {
+  const actuales = leerReglas(filasDe('Leer reglas actuales'));
+  c.filas = c.filas.map(fila => ({ ...actuales[fila.segmento], ...fila }));
+}
+return [{ json: { ...c, ruta: p.ruta } }];`);
+  si(f, '¿Cambios válidos?', [1320, Y], '$json.ok');
+  si(f, '¿Es BOT_CONFIG?', [1540, Y - 60], "$json.ruta === 'config-put'");
+
+  // config-drive: se busca la hoja en la carpeta con la cuenta de servicio; sin acceso, se pide compartirla.
+  codigo(f, 'Carpeta pedida', [880, Y + 280], ['sync.js'], `
+const p = $input.first().json;
+return [{ json: { url: p.url, folder_id: extraerFolderId(p.url) } }];`);
+  si(f, '¿URL de carpeta?', [1100, Y + 280], '!!$json.folder_id');
+  driveBuscarHojas(f, 'Buscar hojas de la carpeta', [1320, Y + 220], "$('Carpeta pedida').first().json.folder_id", { onError: 'continueRegularOutput' });
+  codigo(f, 'Conectar carpeta', [1540, Y + 280], ['sync.js'], `
+${FILAS_DE}
+const p = $('Carpeta pedida').first().json;
+const archivos = filasDe('Buscar hojas de la carpeta').filter(a => a && a.id);
+const c = conectarDrive({ url: p.url, archivos, correoServicio: $('Configuración').first().json.correoServicio });
+const cuerpo = c.ok ? { ok: true, ruta: 'config-drive', folder_id: c.folder_id, hoja: c.hoja } : { ok: false, error: c.error, correo_servicio: c.correo_servicio || '' };
+return [{ json: { ok: c.ok, ruta: 'config-drive', filas: c.config || [], status: c.status, cuerpo } }];`);
+  si(f, '¿Carpeta conectada?', [1760, Y + 280], '$json.ok');
+
+  // Escrituras compartidas y respuesta.
+  const ORIGEN = "(filasDe('Conectar carpeta')[0] || filasDe('Cambios del dashboard')[0])";
+  codigo(f, 'Filas para BOT_CONFIG', [1980, Y], [], `${FILAS_DE}\nreturn ${ORIGEN}.filas.map(json => ({ json }));`);
+  guardarConfig(f, 'Guardar en BOT_CONFIG', [2200, Y]);
+  codigo(f, 'Filas para BOT_FIDELIZACION', [1980, Y + 140], [], "return $('Cambios del dashboard').first().json.filas.map(json => ({ json }));");
+  sheetsEscribir(f, 'Guardar en BOT_FIDELIZACION', [2200, Y + 140], 'appendOrUpdate', T.fidelizacion, mapa(fidelizacion.COLUMNAS_FIDELIZACION, '$json'), 'segmento');
+  codigo(f, 'Respuesta guardada', [2420, Y + 60], [], `${FILAS_DE}\nconst r = ${ORIGEN};\nreturn [{ json: { status: r.status, cuerpo: r.cuerpo } }];`);
+
+  // sync: corre el subflujo [8] y devuelve su resultado.
+  codigo(f, 'Pedido de sync', [880, Y + 480], [], 'return [{ json: { origen: "api" } }];');
+  ejecutarSubflujo(f, 'Sincronizar Drive', [1100, Y + 480], CONFIG.idSync, 'Subflujo Mermín - Sincronizar Drive.');
+  codigo(f, 'Respuesta de sync', [1320, Y + 480], [], `
+const r = $input.first().json || {};
+if (r.ok === undefined) return [{ json: { status: 500, cuerpo: { ok: false, error: 'El subflujo Sincronizar Drive no devolvió resultado.' } } }];
+return [{ json: { status: r.ok ? 200 : 422, cuerpo: { ok: r.ok, ruta: 'sync', errores: r.errores, avisos: r.avisos, resumen: r.resumen, ultima_sync: r.ultima_sync } } }];`);
+
   si(f, '¿Respuesta CSV?', [1100 + lecturasPanel.length * 180, 1000], 'typeof $json.csv === \'string\'');
   f.nodo('Responder CSV', 'n8n-nodes-base.respondToWebhook', 1.1, [1320 + lecturasPanel.length * 180, 900], {
     respondWith: 'text',
@@ -678,6 +727,28 @@ return [{ json: { status: r.status || 200, cuerpo: r.ok ? { ok: true, ruta: 'cam
   f.conectar('¿Respuesta CSV?', 'Responder', 1);
   f.conectar('Enrutar', 'Pedido de campaña', salida('campana-enviar'));
   f.cadena('Pedido de campaña', 'Campañas', 'Respuesta de campaña', 'Responder');
+
+  f.conectar('Enrutar', 'Cambios del dashboard', salida('config-put'));
+  f.conectar('Enrutar', 'Leer reglas actuales', salida('fidelizacion-put'));
+  f.conectar('Leer reglas actuales', 'Cambios del dashboard');
+  f.conectar('Cambios del dashboard', '¿Cambios válidos?');
+  f.conectar('¿Cambios válidos?', '¿Es BOT_CONFIG?', 0);
+  f.conectar('¿Cambios válidos?', 'Responder', 1);
+  f.conectar('¿Es BOT_CONFIG?', 'Filas para BOT_CONFIG', 0);
+  f.conectar('¿Es BOT_CONFIG?', 'Filas para BOT_FIDELIZACION', 1);
+  f.cadena('Filas para BOT_CONFIG', 'Guardar en BOT_CONFIG', 'Respuesta guardada', 'Responder');
+  f.cadena('Filas para BOT_FIDELIZACION', 'Guardar en BOT_FIDELIZACION', 'Respuesta guardada');
+
+  f.conectar('Enrutar', 'Carpeta pedida', salida('config-drive'));
+  f.conectar('Carpeta pedida', '¿URL de carpeta?');
+  f.conectar('¿URL de carpeta?', 'Buscar hojas de la carpeta', 0);
+  f.conectar('¿URL de carpeta?', 'Conectar carpeta', 1);
+  f.cadena('Buscar hojas de la carpeta', 'Conectar carpeta', '¿Carpeta conectada?');
+  f.conectar('¿Carpeta conectada?', 'Filas para BOT_CONFIG', 0);
+  f.conectar('¿Carpeta conectada?', 'Responder', 1);
+
+  f.conectar('Enrutar', 'Pedido de sync', salida('sync'));
+  f.cadena('Pedido de sync', 'Sincronizar Drive', 'Respuesta de sync', 'Responder');
   return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
 }
 

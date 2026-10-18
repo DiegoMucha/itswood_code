@@ -16,6 +16,10 @@ const RUTAS = {
   leads: { metodo: 'GET' },
   metricas: { metodo: 'GET' },
   segmentos: { metodo: 'GET' },
+  config: { metodo: ['GET', 'PUT'] },
+  'config-drive': { metodo: 'POST', url: 'config/drive' },
+  sync: { metodo: 'POST' },
+  fidelizacion: { metodo: ['GET', 'PUT'] },
   // Rutas con un parámetro en la URL (ver resolverRuta).
   'segmento-clientes': { metodo: 'GET', url: 'segmentos/{segmento}/clientes' },
   recomendacion: { metodo: 'GET', url: 'recomendaciones/{cliente_id}' },
@@ -35,6 +39,7 @@ function resolverRuta(ruta, id, accion) {
   const [a, b, c] = [ruta, id, accion].map(t);
   const base = a.toLowerCase();
   if (!b) return { nombre: base, param: '' };
+  if (base === 'config' && b.toLowerCase() === 'drive' && !c) return { nombre: 'config-drive', param: '' };
   if (base === 'segmentos' && c.toLowerCase() === 'clientes') return { nombre: 'segmento-clientes', param: b.toUpperCase() };
   if (base === 'recomendaciones' && !c) return { nombre: 'recomendacion', param: b };
   if (base === 'audiencias' && !c) return { nombre: 'audiencia', param: b.replace(/\.csv$/i, '').toUpperCase() };
@@ -105,6 +110,17 @@ function validarPeticion({ metodo, ruta, id, accion, query, body, ahora }) {
       return { ok: true, ruta: r, segmento: param, limite };
     case 'recomendacion':
       return { ok: true, ruta: r, cliente_id: param };
+    // PUT va por su propia rama (config-put / fidelizacion-put): el flujo valida los cambios y los guarda.
+    case 'config':
+    case 'fidelizacion':
+      if (m !== 'PUT') return { ok: true, ruta: r };
+      if (!Object.keys(b).length) return fallo(400, 'El cuerpo no puede estar vacío.');
+      return { ok: true, ruta: `${r}-put`, cambios: b };
+    case 'config-drive':
+      if (!t(b.url)) return fallo(400, 'url es obligatoria: el enlace de la carpeta de Drive.');
+      return { ok: true, ruta: r, url: t(b.url).slice(0, 500) };
+    case 'sync':
+      return { ok: true, ruta: r };
     case 'campana-preview':
     case 'campana-enviar':
       if (!SEGMENTOS_API.slice(0, 5).includes(param)) return fallo(400, `segmento debe ser ${SEGMENTOS_API.slice(0, 5).join(', ')}.`);

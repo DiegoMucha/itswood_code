@@ -5,10 +5,23 @@
 // En n8n se concatenan antes config.js, metricas.js y fidelizacion.js; en Node se cargan con require.
 
 const PANEL_DEPS = typeof calcularMetricas === 'function'
-  ? { leerConfig, calcularMetricas, segmentar, conteoSegmentos, leerReglas, recomendarPara, audiencia, aQuienLeToca }
+  ? {
+    leerConfig, validarCambiosConfig, DESCRIPCIONES_CONFIG, CLAVES_SOLO_LECTURA, calcularMetricas,
+    segmentar, conteoSegmentos, leerReglas, validarReglas, recomendarPara, audiencia, aQuienLeToca,
+  }
   : { ...require('./config'), ...require('./metricas'), ...require('./fidelizacion') };
 
 // Lo que el dashboard muestra de cada cliente segmentado (sin las listas internas).
+// PUT /config y PUT /fidelizacion: cambios del dashboard -> filas a guardar (appendOrUpdate) y respuesta.
+function cambiosPanel(peticion) {
+  const r = peticion.ruta === 'config-put'
+    ? PANEL_DEPS.validarCambiosConfig(peticion.cambios)
+    : PANEL_DEPS.validarReglas(peticion.cambios);
+  if (!r.ok) return { ok: false, filas: [], status: 400, cuerpo: { ok: false, error: r.error } };
+  const clave = peticion.ruta === 'config-put' ? 'clave' : 'segmento';
+  return { ok: true, filas: r.filas, status: 200, cuerpo: { ok: true, ruta: peticion.ruta.replace(/-put$/, ''), guardados: r.filas.map(f => f[clave]) } };
+}
+
 function clientePanel(c) {
   const { fechas_pedidos, skus_comprados, ...visible } = c;
   return visible;
@@ -30,6 +43,15 @@ function responderPanel(peticion, datos, ahora) {
   const reglas = () => PANEL_DEPS.leerReglas(d.fidelizacion);
   const recomendar = (cliente, r) => PANEL_DEPS.recomendarPara(cliente, { productos: d.productos, ventas: d.ventas, reglas: r, config, ahora: ahoraIso });
   switch (peticion.ruta) {
+    case 'config':
+      return {
+        status: 200,
+        cuerpo: { ok: true, ruta: 'config', config, descripciones: PANEL_DEPS.DESCRIPCIONES_CONFIG, solo_lectura: PANEL_DEPS.CLAVES_SOLO_LECTURA },
+      };
+    case 'fidelizacion': {
+      const r = reglas();
+      return { status: 200, cuerpo: { ok: true, ruta: 'fidelizacion', reglas: Object.keys(r).map(s => r[s]) } };
+    }
     case 'segmentos': {
       const lista = segmentados();
       const r = reglas();
@@ -79,4 +101,4 @@ function responderPanel(peticion, datos, ahora) {
   }
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { responderPanel };
+if (typeof module !== 'undefined' && module.exports) module.exports = { responderPanel, cambiosPanel };

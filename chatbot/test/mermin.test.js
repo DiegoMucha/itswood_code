@@ -440,4 +440,56 @@ test('métricas: período a medida, ticket sin ventas y validación de fechas', 
   assert.equal((await llamarApi({ metodo: 'GET', ruta: 'metricas', query: { desde: '17/10/2026' } }, e)).status, 400);
 });
 
+// ---------- 9. Contrato de API para el dashboard ----------
+
+test('API: GET y PUT /config cambian el nombre del bot que ve el cliente', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  const antes = await llamarApi({ metodo: 'GET', ruta: 'config' }, e);
+  assert.equal(antes.cuerpo.config.nombre_bot, 'Mermín');
+  assert.ok(antes.cuerpo.solo_lectura.includes('ultima_sync'));
+  const put = await llamarApi({ metodo: 'PUT', ruta: 'config', body: { nombre_bot: 'Roble', porcentaje_descuento_web: '15' } }, e);
+  assert.deepEqual(put.cuerpo, { ok: true, ruta: 'config', guardados: ['nombre_bot', 'porcentaje_descuento_web'] });
+  assert.match((await e.cliente(ANA, 'Hola'))[0], /Soy Roble 🌳.*15% de descuento/s);
+  assert.equal((await llamarApi({ metodo: 'PUT', ruta: 'config', body: { tono: 'raro' } }, e)).status, 400);
+  assert.equal((await llamarApi({ metodo: 'POST', ruta: 'config', body: {} }, e)).status, 405);
+});
+
+test('API: GET y PUT /fidelizacion editan una regla sin borrar las otras columnas', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  const put = await llamarApi({ metodo: 'PUT', ruta: 'fidelizacion', body: { reglas: [{ segmento: 'VIP', oferta: 'Envío gratis' }] } }, e);
+  assert.deepEqual(put.cuerpo.guardados, ['VIP']);
+  const r = await llamarApi({ metodo: 'GET', ruta: 'fidelizacion' }, e);
+  const vip = r.cuerpo.reglas.find(x => x.segmento === 'VIP');
+  assert.equal(vip.oferta, 'Envío gratis');
+  assert.equal(vip.canal, 'WHATSAPP PERSONAL (HUMANO)');
+  assert.equal(r.cuerpo.reglas.length, 5);
+});
+
+test('API: POST /config/drive conecta la carpeta y POST /sync sincroniza', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  e.config.correoServicio = 'bot@proyecto.iam.gserviceaccount.com';
+  e.drive = { listar: id => (id === 'CARPETA_DEMO_1234' ? demo.ARCHIVOS_CARPETA : []), leer: (id, p) => (id === 'SHEET_FUENTE' ? demo.copia()[p] : []) };
+  const sinAcceso = await llamarApi({ metodo: 'POST', ruta: 'config/drive', body: { url: 'https://drive.google.com/drive/folders/OTRA_CARPETA_1' } }, e);
+  assert.equal(sinAcceso.status, 403);
+  assert.equal(sinAcceso.cuerpo.correo_servicio, 'bot@proyecto.iam.gserviceaccount.com');
+  const ok = await llamarApi({ metodo: 'POST', ruta: 'config/drive', body: { url: 'https://drive.google.com/drive/folders/CARPETA_DEMO_1234?usp=sharing' } }, e);
+  assert.equal(ok.cuerpo.hoja.id, 'SHEET_FUENTE');
+  const sync = await llamarApi({ metodo: 'POST', ruta: 'sync', body: {} }, e);
+  assert.equal(sync.cuerpo.ok, true);
+  assert.match(sync.cuerpo.resumen, /9 productos, 7 clientes y 12 líneas de venta/);
+  assert.match(sync.cuerpo.ultima_sync, /^2026-10-17T/);
+  assert.equal((await llamarApi({ metodo: 'POST', ruta: 'config/drive', body: {} }, e)).status, 400);
+});
+
+test('API: rutas desconocidas y métodos equivocados', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  assert.equal((await llamarApi({ metodo: 'GET', ruta: 'segmentos/VIP/otra' }, e)).status, 404);
+  assert.equal((await llamarApi({ metodo: 'GET', ruta: 'campanas/VIP/preview' }, e)).status, 405);
+  assert.equal((await llamarApi({ metodo: 'POST', ruta: 'campanas/OCASIONAL/preview', body: {} }, e)).status, 400);
+});
+
 module.exports = { entorno, conversar, conDrive, ANA, LUIS, CONFIG_DEMO };
