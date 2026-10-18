@@ -1,0 +1,783 @@
+{
+  "name": "ITS WOOD - API",
+  "nodes": [
+    {
+      "parameters": {
+        "multipleMethods": true,
+        "httpMethod": [
+          "GET",
+          "POST"
+        ],
+        "path": "api/:ruta",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "72e5cff7-9a44-4a01-aa80-f7d99f912bfc",
+      "name": "API",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "itswood"
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\r\n\r\n// API del bot para otras plataformas (backend a backend), expuesta por n8n en\r\n//   /webhook/itswood/api/<ruta>   con la cabecera X-Api-Key.\r\n// Este archivo valida la petición y da forma a las respuestas; las lecturas y escrituras las hace el flujo.\r\n// Sin dependencias: se usa en los nodos Code de n8n y en el simulador.\r\n\r\nconst RUTAS = {\r\n  salud: { metodo: 'GET' },\r\n  mensaje: { metodo: 'POST' },\r\n  conversacion: { metodo: 'GET' },\r\n  solicitudes: { metodo: 'GET' },\r\n  proveedores: { metodo: 'GET' },\r\n  cotizaciones: { metodo: 'GET' },\r\n  'confirmar-orden': { metodo: 'POST' },\r\n};\r\nconst LIMITE_MAXIMO = 500;\r\nconst INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];\r\n\r\nfunction t(x) { return x === undefined || x === null ? '' : String(x).trim(); }\r\nfunction digitos(x) { return t(x).replace(/\\D/g, ''); }\r\n\r\n// Webhook de n8n: { params: { ruta }, query, body, headers }. El método llega en el campo que n8n informe\r\n// (con varios métodos habilitados, la salida de cada método va por su propia rama; el flujo lo pasa aquí).\r\nfunction validarPeticion({ metodo, ruta, query, body, ahora }) {\r\n  const q = query || {};\r\n  const b = body && typeof body === 'object' ? body : {};\r\n  const m = t(metodo).toUpperCase();\r\n  const r = t(ruta).toLowerCase();\r\n  const fallo = (status, error) => ({ ok: false, status, error, ruta: r });\r\n  if (!RUTAS[r]) return fallo(404, `Ruta desconocida: ${r || '(vacía)'}. Rutas: ${Object.keys(RUTAS).join(', ')}.`);\r\n  if (RUTAS[r].metodo !== m) return fallo(405, `La ruta ${r} usa ${RUTAS[r].metodo}.`);\r\n\r\n  const limite = Math.min(Math.max(parseInt(t(q.limite), 10) || 100, 1), LIMITE_MAXIMO);\r\n  switch (r) {\r\n    case 'mensaje': {\r\n      const waId = digitos(b.wa_id);\r\n      const texto = t(b.texto);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio: número con código de país, por ejemplo 51987654321.');\r\n      if (!texto) return fallo(400, 'texto es obligatorio.');\r\n      if (texto.length > 1000) return fallo(400, 'texto admite hasta 1000 caracteres.');\r\n      const ahoraIso = ahora || new Date().toISOString();\r\n      const mensajeId = t(b.mensaje_id) || `API-${waId}-${Date.parse(ahoraIso).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;\r\n      return {\r\n        ok: true, ruta: r,\r\n        // Mismo formato que produce normalizar.js; origen \"api\": la respuesta vuelve por HTTP, no por WhatsApp.\r\n        mensaje: {\r\n          tipo_evento: 'mensaje', origen: 'api', mensaje_id: mensajeId, wa_id: waId, telefono: waId,\r\n          nombre_perfil: t(b.nombre).slice(0, 80), phone_number_id: '', fecha_iso: ahoraIso, tipo: 'text',\r\n          texto, opcion_id: '', media_id: '', latitud: '', longitud: '',\r\n        },\r\n      };\r\n    }\r\n    case 'conversacion': {\r\n      const waId = digitos(q.wa_id);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio en la consulta (?wa_id=51987654321).');\r\n      return { ok: true, ruta: r, filtros: { wa_id: waId }, limite: 1 };\r\n    }\r\n    case 'solicitudes': {\r\n      const intencion = t(q.intencion).toUpperCase();\r\n      if (intencion && !INTENCIONES.includes(intencion)) return fallo(400, `intencion debe ser ${INTENCIONES.join(', ')}.`);\r\n      return { ok: true, ruta: r, filtros: { estado: t(q.estado).toUpperCase(), wa_id: digitos(q.wa_id), intencion }, limite };\r\n    }\r\n    case 'cotizaciones':\r\n      return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };\r\n    case 'proveedores':\r\n      return { ok: true, ruta: r, filtros: {}, limite };\r\n    case 'confirmar-orden': {\r\n      const solicitudId = t(b.solicitud_id);\r\n      if (!solicitudId) return fallo(400, 'solicitud_id es obligatorio.');\r\n      return { ok: true, ruta: r, solicitud_id: solicitudId, simular: b.simular === true, responsable: t(b.responsable).slice(0, 80) || 'API' };\r\n    }\r\n    default:\r\n      return { ok: true, ruta: r };\r\n  }\r\n}\r\n\r\n// Filas leídas de Sheets -> lista para la respuesta. Quita filas vacías y el número de fila interno de n8n.\r\nfunction filtrarFilas(filas, filtros, limite) {\r\n  const f = filtros || {};\r\n  const limpias = (filas || [])\r\n    .filter(x => x && Object.keys(x).some(k => k !== 'row_number' && t(x[k]) !== ''))\r\n    .map(x => { const c = { ...x }; delete c.row_number; return c; })\r\n    .filter(x => Object.entries(f).every(([k, val]) => !val || t(x[k]).toUpperCase() === t(val).toUpperCase()));\r\n  // Lo más reciente primero (las pestañas se escriben en orden de llegada).\r\n  return limpias.reverse().slice(0, limite || 100);\r\n}\r\n\r\nfunction respuestaLista(ruta, filas, filtros, limite) {\r\n  const datos = filtrarFilas(filas, filtros, limite);\r\n  return { status: 200, cuerpo: { ok: true, ruta, total: datos.length, datos } };\r\n}\r\n\r\nfunction respuestaConversacion(filas, waId) {\r\n  const [conv] = filtrarFilas(filas, { wa_id: waId }, 1);\r\n  if (!conv) return { status: 404, cuerpo: { ok: false, error: `No hay conversación para ${waId}.` } };\r\n  return { status: 200, cuerpo: { ok: true, ruta: 'conversacion', datos: conv } };\r\n}\r\n\r\n// Salida del subflujo \"Procesar mensaje\" -> respuesta HTTP de la ruta mensaje.\r\nfunction respuestaMensaje(mensaje, filasSalida) {\r\n  const salidas = (filasSalida || []).filter(x => x && t(x.texto) && t(x.direccion) === 'SALIDA');\r\n  const respuestas = salidas.map(x => t(x.texto));\r\n  const omitido = salidas.length && salidas.every(x => t(x.resultado) === 'OMITIDO_CAMBIO_MODO');\r\n  return {\r\n    status: 200,\r\n    cuerpo: {\r\n      ok: true, ruta: 'mensaje', mensaje_id: mensaje.mensaje_id, wa_id: mensaje.wa_id,\r\n      respuestas: omitido ? [] : respuestas,\r\n      // Sin respuestas: la conversación está con una persona del equipo, el mensaje era duplicado o el modo cambió.\r\n      atendido_por: respuestas.length && !omitido ? 'bot' : 'equipo_o_sin_respuesta',\r\n    },\r\n  };\r\n}\r\n\r\nif (typeof module !== 'undefined' && module.exports) {\r\n  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaConversacion, respuestaMensaje, RUTAS };\r\n}\n\n// ---- n8n ----\nconst w = $input.first().json;\nconst v = validarPeticion({ metodo: 'GET', ruta: (w.params || {}).ruta, query: w.query, body: w.body });\nif (!v.ok) return [{ json: { ruta: 'error', status: v.status, cuerpo: { ok: false, error: v.error } } }];\nif (v.ruta === 'salud') return [{ json: { ruta: 'salud', status: 200, cuerpo: { ok: true, servicio: 'itswood-bot' } } }];\nreturn [{ json: v }];"
+      },
+      "id": "76a1acf6-7895-4b3f-a2d2-1a5eede984ee",
+      "name": "Petición GET",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\r\n\r\n// API del bot para otras plataformas (backend a backend), expuesta por n8n en\r\n//   /webhook/itswood/api/<ruta>   con la cabecera X-Api-Key.\r\n// Este archivo valida la petición y da forma a las respuestas; las lecturas y escrituras las hace el flujo.\r\n// Sin dependencias: se usa en los nodos Code de n8n y en el simulador.\r\n\r\nconst RUTAS = {\r\n  salud: { metodo: 'GET' },\r\n  mensaje: { metodo: 'POST' },\r\n  conversacion: { metodo: 'GET' },\r\n  solicitudes: { metodo: 'GET' },\r\n  proveedores: { metodo: 'GET' },\r\n  cotizaciones: { metodo: 'GET' },\r\n  'confirmar-orden': { metodo: 'POST' },\r\n};\r\nconst LIMITE_MAXIMO = 500;\r\nconst INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];\r\n\r\nfunction t(x) { return x === undefined || x === null ? '' : String(x).trim(); }\r\nfunction digitos(x) { return t(x).replace(/\\D/g, ''); }\r\n\r\n// Webhook de n8n: { params: { ruta }, query, body, headers }. El método llega en el campo que n8n informe\r\n// (con varios métodos habilitados, la salida de cada método va por su propia rama; el flujo lo pasa aquí).\r\nfunction validarPeticion({ metodo, ruta, query, body, ahora }) {\r\n  const q = query || {};\r\n  const b = body && typeof body === 'object' ? body : {};\r\n  const m = t(metodo).toUpperCase();\r\n  const r = t(ruta).toLowerCase();\r\n  const fallo = (status, error) => ({ ok: false, status, error, ruta: r });\r\n  if (!RUTAS[r]) return fallo(404, `Ruta desconocida: ${r || '(vacía)'}. Rutas: ${Object.keys(RUTAS).join(', ')}.`);\r\n  if (RUTAS[r].metodo !== m) return fallo(405, `La ruta ${r} usa ${RUTAS[r].metodo}.`);\r\n\r\n  const limite = Math.min(Math.max(parseInt(t(q.limite), 10) || 100, 1), LIMITE_MAXIMO);\r\n  switch (r) {\r\n    case 'mensaje': {\r\n      const waId = digitos(b.wa_id);\r\n      const texto = t(b.texto);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio: número con código de país, por ejemplo 51987654321.');\r\n      if (!texto) return fallo(400, 'texto es obligatorio.');\r\n      if (texto.length > 1000) return fallo(400, 'texto admite hasta 1000 caracteres.');\r\n      const ahoraIso = ahora || new Date().toISOString();\r\n      const mensajeId = t(b.mensaje_id) || `API-${waId}-${Date.parse(ahoraIso).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;\r\n      return {\r\n        ok: true, ruta: r,\r\n        // Mismo formato que produce normalizar.js; origen \"api\": la respuesta vuelve por HTTP, no por WhatsApp.\r\n        mensaje: {\r\n          tipo_evento: 'mensaje', origen: 'api', mensaje_id: mensajeId, wa_id: waId, telefono: waId,\r\n          nombre_perfil: t(b.nombre).slice(0, 80), phone_number_id: '', fecha_iso: ahoraIso, tipo: 'text',\r\n          texto, opcion_id: '', media_id: '', latitud: '', longitud: '',\r\n        },\r\n      };\r\n    }\r\n    case 'conversacion': {\r\n      const waId = digitos(q.wa_id);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio en la consulta (?wa_id=51987654321).');\r\n      return { ok: true, ruta: r, filtros: { wa_id: waId }, limite: 1 };\r\n    }\r\n    case 'solicitudes': {\r\n      const intencion = t(q.intencion).toUpperCase();\r\n      if (intencion && !INTENCIONES.includes(intencion)) return fallo(400, `intencion debe ser ${INTENCIONES.join(', ')}.`);\r\n      return { ok: true, ruta: r, filtros: { estado: t(q.estado).toUpperCase(), wa_id: digitos(q.wa_id), intencion }, limite };\r\n    }\r\n    case 'cotizaciones':\r\n      return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };\r\n    case 'proveedores':\r\n      return { ok: true, ruta: r, filtros: {}, limite };\r\n    case 'confirmar-orden': {\r\n      const solicitudId = t(b.solicitud_id);\r\n      if (!solicitudId) return fallo(400, 'solicitud_id es obligatorio.');\r\n      return { ok: true, ruta: r, solicitud_id: solicitudId, simular: b.simular === true, responsable: t(b.responsable).slice(0, 80) || 'API' };\r\n    }\r\n    default:\r\n      return { ok: true, ruta: r };\r\n  }\r\n}\r\n\r\n// Filas leídas de Sheets -> lista para la respuesta. Quita filas vacías y el número de fila interno de n8n.\r\nfunction filtrarFilas(filas, filtros, limite) {\r\n  const f = filtros || {};\r\n  const limpias = (filas || [])\r\n    .filter(x => x && Object.keys(x).some(k => k !== 'row_number' && t(x[k]) !== ''))\r\n    .map(x => { const c = { ...x }; delete c.row_number; return c; })\r\n    .filter(x => Object.entries(f).every(([k, val]) => !val || t(x[k]).toUpperCase() === t(val).toUpperCase()));\r\n  // Lo más reciente primero (las pestañas se escriben en orden de llegada).\r\n  return limpias.reverse().slice(0, limite || 100);\r\n}\r\n\r\nfunction respuestaLista(ruta, filas, filtros, limite) {\r\n  const datos = filtrarFilas(filas, filtros, limite);\r\n  return { status: 200, cuerpo: { ok: true, ruta, total: datos.length, datos } };\r\n}\r\n\r\nfunction respuestaConversacion(filas, waId) {\r\n  const [conv] = filtrarFilas(filas, { wa_id: waId }, 1);\r\n  if (!conv) return { status: 404, cuerpo: { ok: false, error: `No hay conversación para ${waId}.` } };\r\n  return { status: 200, cuerpo: { ok: true, ruta: 'conversacion', datos: conv } };\r\n}\r\n\r\n// Salida del subflujo \"Procesar mensaje\" -> respuesta HTTP de la ruta mensaje.\r\nfunction respuestaMensaje(mensaje, filasSalida) {\r\n  const salidas = (filasSalida || []).filter(x => x && t(x.texto) && t(x.direccion) === 'SALIDA');\r\n  const respuestas = salidas.map(x => t(x.texto));\r\n  const omitido = salidas.length && salidas.every(x => t(x.resultado) === 'OMITIDO_CAMBIO_MODO');\r\n  return {\r\n    status: 200,\r\n    cuerpo: {\r\n      ok: true, ruta: 'mensaje', mensaje_id: mensaje.mensaje_id, wa_id: mensaje.wa_id,\r\n      respuestas: omitido ? [] : respuestas,\r\n      // Sin respuestas: la conversación está con una persona del equipo, el mensaje era duplicado o el modo cambió.\r\n      atendido_por: respuestas.length && !omitido ? 'bot' : 'equipo_o_sin_respuesta',\r\n    },\r\n  };\r\n}\r\n\r\nif (typeof module !== 'undefined' && module.exports) {\r\n  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaConversacion, respuestaMensaje, RUTAS };\r\n}\n\n// ---- n8n ----\nconst w = $input.first().json;\nconst v = validarPeticion({ metodo: 'POST', ruta: (w.params || {}).ruta, query: w.query, body: w.body });\nif (!v.ok) return [{ json: { ruta: 'error', status: v.status, cuerpo: { ok: false, error: v.error } } }];\nif (v.ruta === 'salud') return [{ json: { ruta: 'salud', status: 200, cuerpo: { ok: true, servicio: 'itswood-bot' } } }];\nreturn [{ json: v }];"
+      },
+      "id": "61172933-4002-481d-ad4c-d8bf706cd18f",
+      "name": "Petición POST",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "32df67b7-a8e5-4dba-a59d-298cd61e8a20",
+              "name": "sheetId",
+              "value": "PEGAR_ID_DE_LA_HOJA",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "6022ab4a-310b-4c6b-ab0d-56c36187714d",
+      "name": "Configuración",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        300
+      ],
+      "notes": "Valores del entorno. Edítalos aquí después de importar (o en config.local.json y vuelve a generar)."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "97081b95-eacd-4b7d-a82f-cf120dd79fd7",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "error",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "error"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8069e287-33c6-4807-acb6-5202e72a3a3d",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "salud",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "salud"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a41808a9-3c50-4fb5-ad40-1b2c04e29c43",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "mensaje",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "mensaje"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fb5b2de7-d985-44a9-acd5-060605418ea4",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "conversacion",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "conversacion"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ed3043f2-a571-4044-a7a5-ecae37834f8c",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "solicitudes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "solicitudes"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "66b78397-94b2-4e2e-abc7-7b7b20b4b562",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "proveedores",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "proveedores"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c55f8a07-5a5b-4915-aee1-16d000efd3f9",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "cotizaciones",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cotizaciones"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "97c01e02-db37-4086-a26d-65e84ad9667d",
+                    "leftValue": "={{ $json.ruta }}",
+                    "rightValue": "confirmar-orden",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "confirmar-orden"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1d4624b8-37f9-4504-afc1-943e6de9ad39",
+      "name": "Enrutar",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- n8n ----\nreturn [{ json: $input.first().json.mensaje }];"
+      },
+      "id": "c9842ef3-5c3b-479b-aa2b-598bdbeb82b3",
+      "name": "Mensaje para el bot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b8bc0ca1-4c7f-4326-a597-bf22735bd7a3",
+      "name": "Procesar mensaje",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        100
+      ],
+      "alwaysOutputData": true,
+      "notes": "Subflujo ITS WOOD - Procesar mensaje."
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\r\n\r\n// API del bot para otras plataformas (backend a backend), expuesta por n8n en\r\n//   /webhook/itswood/api/<ruta>   con la cabecera X-Api-Key.\r\n// Este archivo valida la petición y da forma a las respuestas; las lecturas y escrituras las hace el flujo.\r\n// Sin dependencias: se usa en los nodos Code de n8n y en el simulador.\r\n\r\nconst RUTAS = {\r\n  salud: { metodo: 'GET' },\r\n  mensaje: { metodo: 'POST' },\r\n  conversacion: { metodo: 'GET' },\r\n  solicitudes: { metodo: 'GET' },\r\n  proveedores: { metodo: 'GET' },\r\n  cotizaciones: { metodo: 'GET' },\r\n  'confirmar-orden': { metodo: 'POST' },\r\n};\r\nconst LIMITE_MAXIMO = 500;\r\nconst INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];\r\n\r\nfunction t(x) { return x === undefined || x === null ? '' : String(x).trim(); }\r\nfunction digitos(x) { return t(x).replace(/\\D/g, ''); }\r\n\r\n// Webhook de n8n: { params: { ruta }, query, body, headers }. El método llega en el campo que n8n informe\r\n// (con varios métodos habilitados, la salida de cada método va por su propia rama; el flujo lo pasa aquí).\r\nfunction validarPeticion({ metodo, ruta, query, body, ahora }) {\r\n  const q = query || {};\r\n  const b = body && typeof body === 'object' ? body : {};\r\n  const m = t(metodo).toUpperCase();\r\n  const r = t(ruta).toLowerCase();\r\n  const fallo = (status, error) => ({ ok: false, status, error, ruta: r });\r\n  if (!RUTAS[r]) return fallo(404, `Ruta desconocida: ${r || '(vacía)'}. Rutas: ${Object.keys(RUTAS).join(', ')}.`);\r\n  if (RUTAS[r].metodo !== m) return fallo(405, `La ruta ${r} usa ${RUTAS[r].metodo}.`);\r\n\r\n  const limite = Math.min(Math.max(parseInt(t(q.limite), 10) || 100, 1), LIMITE_MAXIMO);\r\n  switch (r) {\r\n    case 'mensaje': {\r\n      const waId = digitos(b.wa_id);\r\n      const texto = t(b.texto);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio: número con código de país, por ejemplo 51987654321.');\r\n      if (!texto) return fallo(400, 'texto es obligatorio.');\r\n      if (texto.length > 1000) return fallo(400, 'texto admite hasta 1000 caracteres.');\r\n      const ahoraIso = ahora || new Date().toISOString();\r\n      const mensajeId = t(b.mensaje_id) || `API-${waId}-${Date.parse(ahoraIso).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;\r\n      return {\r\n        ok: true, ruta: r,\r\n        // Mismo formato que produce normalizar.js; origen \"api\": la respuesta vuelve por HTTP, no por WhatsApp.\r\n        mensaje: {\r\n          tipo_evento: 'mensaje', origen: 'api', mensaje_id: mensajeId, wa_id: waId, telefono: waId,\r\n          nombre_perfil: t(b.nombre).slice(0, 80), phone_number_id: '', fecha_iso: ahoraIso, tipo: 'text',\r\n          texto, opcion_id: '', media_id: '', latitud: '', longitud: '',\r\n        },\r\n      };\r\n    }\r\n    case 'conversacion': {\r\n      const waId = digitos(q.wa_id);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio en la consulta (?wa_id=51987654321).');\r\n      return { ok: true, ruta: r, filtros: { wa_id: waId }, limite: 1 };\r\n    }\r\n    case 'solicitudes': {\r\n      const intencion = t(q.intencion).toUpperCase();\r\n      if (intencion && !INTENCIONES.includes(intencion)) return fallo(400, `intencion debe ser ${INTENCIONES.join(', ')}.`);\r\n      return { ok: true, ruta: r, filtros: { estado: t(q.estado).toUpperCase(), wa_id: digitos(q.wa_id), intencion }, limite };\r\n    }\r\n    case 'cotizaciones':\r\n      return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };\r\n    case 'proveedores':\r\n      return { ok: true, ruta: r, filtros: {}, limite };\r\n    case 'confirmar-orden': {\r\n      const solicitudId = t(b.solicitud_id);\r\n      if (!solicitudId) return fallo(400, 'solicitud_id es obligatorio.');\r\n      return { ok: true, ruta: r, solicitud_id: solicitudId, simular: b.simular === true, responsable: t(b.responsable).slice(0, 80) || 'API' };\r\n    }\r\n    default:\r\n      return { ok: true, ruta: r };\r\n  }\r\n}\r\n\r\n// Filas leídas de Sheets -> lista para la respuesta. Quita filas vacías y el número de fila interno de n8n.\r\nfunction filtrarFilas(filas, filtros, limite) {\r\n  const f = filtros || {};\r\n  const limpias = (filas || [])\r\n    .filter(x => x && Object.keys(x).some(k => k !== 'row_number' && t(x[k]) !== ''))\r\n    .map(x => { const c = { ...x }; delete c.row_number; return c; })\r\n    .filter(x => Object.entries(f).every(([k, val]) => !val || t(x[k]).toUpperCase() === t(val).toUpperCase()));\r\n  // Lo más reciente primero (las pestañas se escriben en orden de llegada).\r\n  return limpias.reverse().slice(0, limite || 100);\r\n}\r\n\r\nfunction respuestaLista(ruta, filas, filtros, limite) {\r\n  const datos = filtrarFilas(filas, filtros, limite);\r\n  return { status: 200, cuerpo: { ok: true, ruta, total: datos.length, datos } };\r\n}\r\n\r\nfunction respuestaConversacion(filas, waId) {\r\n  const [conv] = filtrarFilas(filas, { wa_id: waId }, 1);\r\n  if (!conv) return { status: 404, cuerpo: { ok: false, error: `No hay conversación para ${waId}.` } };\r\n  return { status: 200, cuerpo: { ok: true, ruta: 'conversacion', datos: conv } };\r\n}\r\n\r\n// Salida del subflujo \"Procesar mensaje\" -> respuesta HTTP de la ruta mensaje.\r\nfunction respuestaMensaje(mensaje, filasSalida) {\r\n  const salidas = (filasSalida || []).filter(x => x && t(x.texto) && t(x.direccion) === 'SALIDA');\r\n  const respuestas = salidas.map(x => t(x.texto));\r\n  const omitido = salidas.length && salidas.every(x => t(x.resultado) === 'OMITIDO_CAMBIO_MODO');\r\n  return {\r\n    status: 200,\r\n    cuerpo: {\r\n      ok: true, ruta: 'mensaje', mensaje_id: mensaje.mensaje_id, wa_id: mensaje.wa_id,\r\n      respuestas: omitido ? [] : respuestas,\r\n      // Sin respuestas: la conversación está con una persona del equipo, el mensaje era duplicado o el modo cambió.\r\n      atendido_por: respuestas.length && !omitido ? 'bot' : 'equipo_o_sin_respuesta',\r\n    },\r\n  };\r\n}\r\n\r\nif (typeof module !== 'undefined' && module.exports) {\r\n  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaConversacion, respuestaMensaje, RUTAS };\r\n}\n\n// ---- n8n ----\nconst mensaje = $('Mensaje para el bot').first().json;\nreturn [{ json: respuestaMensaje(mensaje, $input.all().map(i => i.json)) }];"
+      },
+      "id": "f74cceab-1ee3-430b-ad90-2e64f867a0ed",
+      "name": "Respuesta del bot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Configuración').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "BOT_CONVERSACIONES",
+          "mode": "name"
+        },
+        "options": {},
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "wa_id",
+              "lookupValue": "={{ $('Petición GET').first().json.filtros.wa_id }}"
+            }
+          ]
+        }
+      },
+      "id": "bd47e633-bb29-4cba-a0ed-116110fc5fa3",
+      "name": "Leer conversación",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        260
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Configuración').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "BOT_SOLICITUDES",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "cb8879c0-b723-49f1-a2b4-7fe5fd96ab42",
+      "name": "Leer solicitudes",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        380
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Configuración').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PROVEEDORES",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "882cbe84-a4bb-4e2e-ad10-1a02fd24021f",
+      "name": "Leer proveedores",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        500
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Configuración').first().json.sheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "BOT_COTIZACIONES",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "a2e892ad-68e2-4270-ac2d-b622de8dffe0",
+      "name": "Leer cotizaciones",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        620
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "'use strict';\r\n\r\n// API del bot para otras plataformas (backend a backend), expuesta por n8n en\r\n//   /webhook/itswood/api/<ruta>   con la cabecera X-Api-Key.\r\n// Este archivo valida la petición y da forma a las respuestas; las lecturas y escrituras las hace el flujo.\r\n// Sin dependencias: se usa en los nodos Code de n8n y en el simulador.\r\n\r\nconst RUTAS = {\r\n  salud: { metodo: 'GET' },\r\n  mensaje: { metodo: 'POST' },\r\n  conversacion: { metodo: 'GET' },\r\n  solicitudes: { metodo: 'GET' },\r\n  proveedores: { metodo: 'GET' },\r\n  cotizaciones: { metodo: 'GET' },\r\n  'confirmar-orden': { metodo: 'POST' },\r\n};\r\nconst LIMITE_MAXIMO = 500;\r\nconst INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];\r\n\r\nfunction t(x) { return x === undefined || x === null ? '' : String(x).trim(); }\r\nfunction digitos(x) { return t(x).replace(/\\D/g, ''); }\r\n\r\n// Webhook de n8n: { params: { ruta }, query, body, headers }. El método llega en el campo que n8n informe\r\n// (con varios métodos habilitados, la salida de cada método va por su propia rama; el flujo lo pasa aquí).\r\nfunction validarPeticion({ metodo, ruta, query, body, ahora }) {\r\n  const q = query || {};\r\n  const b = body && typeof body === 'object' ? body : {};\r\n  const m = t(metodo).toUpperCase();\r\n  const r = t(ruta).toLowerCase();\r\n  const fallo = (status, error) => ({ ok: false, status, error, ruta: r });\r\n  if (!RUTAS[r]) return fallo(404, `Ruta desconocida: ${r || '(vacía)'}. Rutas: ${Object.keys(RUTAS).join(', ')}.`);\r\n  if (RUTAS[r].metodo !== m) return fallo(405, `La ruta ${r} usa ${RUTAS[r].metodo}.`);\r\n\r\n  const limite = Math.min(Math.max(parseInt(t(q.limite), 10) || 100, 1), LIMITE_MAXIMO);\r\n  switch (r) {\r\n    case 'mensaje': {\r\n      const waId = digitos(b.wa_id);\r\n      const texto = t(b.texto);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio: número con código de país, por ejemplo 51987654321.');\r\n      if (!texto) return fallo(400, 'texto es obligatorio.');\r\n      if (texto.length > 1000) return fallo(400, 'texto admite hasta 1000 caracteres.');\r\n      const ahoraIso = ahora || new Date().toISOString();\r\n      const mensajeId = t(b.mensaje_id) || `API-${waId}-${Date.parse(ahoraIso).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;\r\n      return {\r\n        ok: true, ruta: r,\r\n        // Mismo formato que produce normalizar.js; origen \"api\": la respuesta vuelve por HTTP, no por WhatsApp.\r\n        mensaje: {\r\n          tipo_evento: 'mensaje', origen: 'api', mensaje_id: mensajeId, wa_id: waId, telefono: waId,\r\n          nombre_perfil: t(b.nombre).slice(0, 80), phone_number_id: '', fecha_iso: ahoraIso, tipo: 'text',\r\n          texto, opcion_id: '', media_id: '', latitud: '', longitud: '',\r\n        },\r\n      };\r\n    }\r\n    case 'conversacion': {\r\n      const waId = digitos(q.wa_id);\r\n      if (waId.length < 10) return fallo(400, 'wa_id es obligatorio en la consulta (?wa_id=51987654321).');\r\n      return { ok: true, ruta: r, filtros: { wa_id: waId }, limite: 1 };\r\n    }\r\n    case 'solicitudes': {\r\n      const intencion = t(q.intencion).toUpperCase();\r\n      if (intencion && !INTENCIONES.includes(intencion)) return fallo(400, `intencion debe ser ${INTENCIONES.join(', ')}.`);\r\n      return { ok: true, ruta: r, filtros: { estado: t(q.estado).toUpperCase(), wa_id: digitos(q.wa_id), intencion }, limite };\r\n    }\r\n    case 'cotizaciones':\r\n      return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };\r\n    case 'proveedores':\r\n      return { ok: true, ruta: r, filtros: {}, limite };\r\n    case 'confirmar-orden': {\r\n      const solicitudId = t(b.solicitud_id);\r\n      if (!solicitudId) return fallo(400, 'solicitud_id es obligatorio.');\r\n      return { ok: true, ruta: r, solicitud_id: solicitudId, simular: b.simular === true, responsable: t(b.responsable).slice(0, 80) || 'API' };\r\n    }\r\n    default:\r\n      return { ok: true, ruta: r };\r\n  }\r\n}\r\n\r\n// Filas leídas de Sheets -> lista para la respuesta. Quita filas vacías y el número de fila interno de n8n.\r\nfunction filtrarFilas(filas, filtros, limite) {\r\n  const f = filtros || {};\r\n  const limpias = (filas || [])\r\n    .filter(x => x && Object.keys(x).some(k => k !== 'row_number' && t(x[k]) !== ''))\r\n    .map(x => { const c = { ...x }; delete c.row_number; return c; })\r\n    .filter(x => Object.entries(f).every(([k, val]) => !val || t(x[k]).toUpperCase() === t(val).toUpperCase()));\r\n  // Lo más reciente primero (las pestañas se escriben en orden de llegada).\r\n  return limpias.reverse().slice(0, limite || 100);\r\n}\r\n\r\nfunction respuestaLista(ruta, filas, filtros, limite) {\r\n  const datos = filtrarFilas(filas, filtros, limite);\r\n  return { status: 200, cuerpo: { ok: true, ruta, total: datos.length, datos } };\r\n}\r\n\r\nfunction respuestaConversacion(filas, waId) {\r\n  const [conv] = filtrarFilas(filas, { wa_id: waId }, 1);\r\n  if (!conv) return { status: 404, cuerpo: { ok: false, error: `No hay conversación para ${waId}.` } };\r\n  return { status: 200, cuerpo: { ok: true, ruta: 'conversacion', datos: conv } };\r\n}\r\n\r\n// Salida del subflujo \"Procesar mensaje\" -> respuesta HTTP de la ruta mensaje.\r\nfunction respuestaMensaje(mensaje, filasSalida) {\r\n  const salidas = (filasSalida || []).filter(x => x && t(x.texto) && t(x.direccion) === 'SALIDA');\r\n  const respuestas = salidas.map(x => t(x.texto));\r\n  const omitido = salidas.length && salidas.every(x => t(x.resultado) === 'OMITIDO_CAMBIO_MODO');\r\n  return {\r\n    status: 200,\r\n    cuerpo: {\r\n      ok: true, ruta: 'mensaje', mensaje_id: mensaje.mensaje_id, wa_id: mensaje.wa_id,\r\n      respuestas: omitido ? [] : respuestas,\r\n      // Sin respuestas: la conversación está con una persona del equipo, el mensaje era duplicado o el modo cambió.\r\n      atendido_por: respuestas.length && !omitido ? 'bot' : 'equipo_o_sin_respuesta',\r\n    },\r\n  };\r\n}\r\n\r\nif (typeof module !== 'undefined' && module.exports) {\r\n  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaConversacion, respuestaMensaje, RUTAS };\r\n}\n\n// ---- n8n ----\nconst p = $('Petición GET').first().json;\nconst filas = $input.all().map(i => i.json);\nconst r = p.ruta === 'conversacion' ? respuestaConversacion(filas, p.filtros.wa_id) : respuestaLista(p.ruta, filas, p.filtros, p.limite);\nreturn [{ json: r }];"
+      },
+      "id": "2cab42b8-2eb6-4660-a867-c42cd17337c2",
+      "name": "Formatear lista",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- n8n ----\nconst p = $input.first().json;\nreturn [{ json: { solicitud_id: p.solicitud_id, simular: p.simular, responsable: p.responsable } }];"
+      },
+      "id": "e873add6-920d-4495-a66f-e97c1bc2ce37",
+      "name": "Pedido de orden",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "99bea69f-47c7-43f3-a0c3-346dd2bb12d6",
+      "name": "Confirmar orden",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        760
+      ],
+      "alwaysOutputData": true,
+      "notes": "Subflujo ITS WOOD - Confirmar orden."
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ---- n8n ----\nconst r = $input.first().json || {};\nif (r.ok === undefined) return [{ json: { status: 500, cuerpo: { ok: false, error: 'El subflujo Confirmar orden no devolvió resultado.' } } }];\nreturn [{ json: { status: r.status || (r.ok ? 200 : 400), cuerpo: r.ok ? { ok: true, resumen: r.resumen, cotizaciones: r.cotizaciones } : { ok: false, error: r.error } } }];"
+      },
+      "id": "64171d06-a48e-4846-a9a1-741e553df3cc",
+      "name": "Respuesta de la orden",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.cuerpo) }}",
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        }
+      },
+      "id": "ff664c21-52e2-4222-a15b-7e3a73203336",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "API": {
+      "main": [
+        [
+          {
+            "node": "Petición GET",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Petición POST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Petición GET": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Petición POST": {
+      "main": [
+        [
+          {
+            "node": "Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuración": {
+      "main": [
+        [
+          {
+            "node": "Enrutar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutar": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mensaje para el bot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer conversación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer solicitudes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer proveedores",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leer cotizaciones",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pedido de orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mensaje para el bot": {
+      "main": [
+        [
+          {
+            "node": "Procesar mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar mensaje": {
+      "main": [
+        [
+          {
+            "node": "Respuesta del bot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta del bot": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer conversación": {
+      "main": [
+        [
+          {
+            "node": "Formatear lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer solicitudes": {
+      "main": [
+        [
+          {
+            "node": "Formatear lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer proveedores": {
+      "main": [
+        [
+          {
+            "node": "Formatear lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer cotizaciones": {
+      "main": [
+        [
+          {
+            "node": "Formatear lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear lista": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pedido de orden": {
+      "main": [
+        [
+          {
+            "node": "Confirmar orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar orden": {
+      "main": [
+        [
+          {
+            "node": "Respuesta de la orden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta de la orden": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Lima",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
