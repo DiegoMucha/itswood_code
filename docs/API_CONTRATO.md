@@ -6,7 +6,7 @@ Repositorio: un solo repo (`itswood_code`) con carpetas `frontend/` y `backend/`
 ## Convenciones
 - JSON en UTF-8, fechas ISO 8601 (`2026-12-15`), dinero en soles como número (`47` = S/ 47).
 - CORS: el backend permite el dominio del frontend (variable `FRONTEND_ORIGIN`).
-- Sin login en el prototipo. Datos de ejemplo marcados como tales; nunca clientes reales.
+- Login de demo opcional (una sola cuenta, ver "Autenticación"). Datos de ejemplo marcados como tales; nunca clientes reales.
 - Lo que NO existe todavía (no inventar): tabla de descuentos por volumen, plazo de producción, WhatsApp real.
 
 ## Modelo: Producto
@@ -52,7 +52,27 @@ Umbrales marcados [SUPUESTO] hasta que la dueña los confirme.
 ## Endpoints
 
 ### GET /health
-`200 {"ok": true}`
+`200 {"ok": true, "auth": true}`. `auth` dice si el backend pide login.
+
+### Autenticación (login de demo)
+Una sola cuenta, definida en el backend con `ADMIN_EMAIL` y `ADMIN_PASSWORD` (nunca en el repo). Si el backend no
+las tiene, no hay login (`"auth": false`) y todo funciona como antes.
+
+`POST /auth/login`
+```json
+{ "correo": "joaquinsito@gmail.com", "contrasena": "..." }
+```
+`200 {"token": "<token>", "expira_en": "2026-10-18T04:00:00.000Z"}` · `401 {"error": "Correo o contraseña incorrectos"}` ·
+`429` si hay más de 10 intentos por IP en 15 minutos. El token dura 12 h (firmado con HMAC-SHA256, `AUTH_SECRET`).
+
+Con login activo, todas las rutas exigen `Authorization: Bearer <token>` salvo `GET /health`, `POST /auth/login` y
+`POST /chat` (el chat es del cliente final). Sin token o con uno vencido o alterado: `401 {"error": "Inicia sesión..."}`.
+`GET /auth/yo` → `200 {"correo": "...", "expira_en": "..."}`.
+
+Frontend: página `/login`; el token va en `sessionStorage` (`priora.sesion`) y se borra al cerrar la pestaña o con
+"Cerrar sesión". Un 401 cierra la sesión y vuelve a `/login`. En "Modo ejemplo" (sin `VITE_API_URL`) la cuenta de
+demo se valida en el navegador con `VITE_DEMO_PASSWORD`; esa variable queda en el JavaScript publicado, no es un
+secreto. Si está vacía, el modo ejemplo entra sin login.
 
 ### GET /config
 Configuración del negocio (viene de la hoja `Config`, nunca escrita en código).
@@ -115,8 +135,9 @@ Request `{"estado": "confirmado"}`. `200 Pedido`
 
 ## Almacenamiento (Google Sheets, hoja de la dueña)
 Pestañas: `Config`, `Catalogo`, `Pedidos`, `Clientes`. Acceso con cuenta de servicio.
-Variables de entorno del backend: `GEMINI_API_KEY`, `GOOGLE_SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `FRONTEND_ORIGIN`.
-Variable del frontend: `VITE_API_URL`.
+Variables de entorno del backend: `GEMINI_API_KEY`, `GOOGLE_SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `FRONTEND_ORIGIN`,
+`ADMIN_EMAIL`, `ADMIN_PASSWORD`, `AUTH_SECRET` (login de demo).
+Variables del frontend: `VITE_API_URL`, `VITE_DEMO_PASSWORD` (solo modo ejemplo; no es secreta).
 
 ## Errores
 `{"error": "mensaje claro en español"}` con el código HTTP correspondiente.
