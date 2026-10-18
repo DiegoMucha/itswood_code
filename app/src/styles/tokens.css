@@ -1,0 +1,38 @@
+/* Tokens de Priora. No existe landing/assets/styles/tokens.css en este repo:
+   se usan los valores del brief. Si la landing cambia, copiar su archivo aquí. */
+:root {
+  --fondo: #F3EBDF;
+  --fondo-2: #E6D9C8;
+  --taupe: #B8A590;
+  --taupe-oscuro: #8F7A66;
+  --tinta: #3E2F25;
+  --tinta-suave: #6b5a4c;
+  --durazno: #EBA98A;
+  --cobre: #C98F62;
+  --cobre-oscuro: #8a5530;
+  --coral: #eb8278;
+  --coral-oscuro: #a8473d;
+  --verde: #6e8264;
+  --verde-oscuro: #4b5c43;
+  --gris-calido: #a39a91;
+
+  /* Receta de vidrio */
+  --vidrio: rgba(255, 251, 245, 0.55);
+  --vidrio-opaco: rgba(255, 251, 245, 0.86);
+  --vidrio-borde: rgba(255, 255, 255, 0.7);
+  --vidrio-blur: blur(18px) saturate(140%);
+  --sombra: 0 10px 30px rgba(62, 47, 37, 0.08), 0 1px 2px rgba(62, 47, 37, 0.06);
+  --sombra-alta: 0 20px 50px rgba(62, 47, 37, 0.16);
+
+  /* Serie de gráficos (validada con contraste y daltonismo) */
+  --serie-1: #a0521f;
+  --serie-2: #2f6fb0;
+  --serie-3: #c9a227;
+  --serie-4: #3f8f5a;
+  --serie-5: #9b4f9b;
+
+  --radio: 18px;
+  --radio-sm: 10px;
+  --fuente: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fuente-titulo: 'Fraunces', Georgia, serif;
+}

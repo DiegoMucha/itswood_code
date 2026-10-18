@@ -9,6 +9,7 @@ import {
   parseMonto, parseFecha, parseCantidad, normalizarPlataforma, normalizarEstado,
   deducirTipo, huboGrabado, normalizarTelefono, normalizarNombre, tituloBonito, limpiarDistrito,
 } from '../src/lib/parse.js';
+import { catalogoDesdeFilas } from '../src/lib/catalogo.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const refDir = path.resolve(aqui, '../../ref');
@@ -78,3 +79,13 @@ const destino = path.resolve(aqui, '../src/data/ventas_2026.demo.json');
 fs.writeFileSync(destino, JSON.stringify(ventas, null, 1) + '\n');
 const total = ventas.reduce((a, v) => a + v.monto, 0);
 console.log(`Listo: ${ventas.length} registros, ${siguiente - 1} clientes, S/ ${total.toFixed(2)} → ${path.relative(process.cwd(), destino)}`);
+
+// El catálogo no tiene datos personales: se copia tal cual a JSON para el modo ejemplo.
+const catalogoCsv = path.join(refDir, 'catalogo_itswood.csv');
+if (fs.existsSync(catalogoCsv)) {
+  const wbCat = XLSX.read(fs.readFileSync(catalogoCsv, 'utf8'), { type: 'string', raw: true });
+  const filasCat = XLSX.utils.sheet_to_json(wbCat.Sheets[wbCat.SheetNames[0]], { defval: '', raw: false });
+  const destinoCat = path.resolve(aqui, '../src/data/catalogo.demo.json');
+  fs.writeFileSync(destinoCat, JSON.stringify(catalogoDesdeFilas(filasCat), null, 1) + '\n');
+  console.log(`Catálogo: ${filasCat.length} productos → ${path.relative(process.cwd(), destinoCat)}`);
+}
