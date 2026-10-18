@@ -74,30 +74,33 @@
       </div>
     </div>
 
-    <!-- Escena decorativa: la URL de Spline vive SOLO en data-spline-url -->
-    <div class="hero-visual" data-spline-url="https://my.spline.design/claritystream-Txg1N81Wzit6iC1CdjTIFz36/" aria-hidden="true">
-      <!-- Respaldo estático (CSS + SVG): se oculta solo cuando la escena 3D terminó de cargar -->
-      <div class="hero-composicion">
-        <svg class="linea-luz" viewBox="0 0 1440 900" preserveAspectRatio="none" focusable="false">
-          <defs>
-            <linearGradient id="luz-gradiente" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stop-color="#EBA98A" stop-opacity="0"/>
-              <stop offset="0.35" stop-color="#EBA98A"/>
-              <stop offset="0.65" stop-color="#FBF6EF"/>
-              <stop offset="1" stop-color="#C98F62" stop-opacity="0.2"/>
-            </linearGradient>
-          </defs>
-          <path class="linea-luz-halo" d="M-40 560 C 300 640, 520 860, 760 820 S 1180 520, 1500 420"/>
-          <path class="linea-luz-trazo" d="M-40 560 C 300 640, 520 860, 760 820 S 1180 520, 1500 420"/>
-          <path class="linea-luz-nucleo" d="M-40 560 C 300 640, 520 860, 760 820 S 1180 520, 1500 420"/>
-        </svg>
-        <span class="panel panel-1"></span>
-        <span class="panel panel-2 panel-piedra"></span>
-        <span class="panel panel-3"></span>
-        <span class="panel panel-4"></span>
-        <span class="esfera esfera-grande"></span>
-        <span class="esfera esfera-chica"></span>
-      </div>
+    <!-- Curva de luz decorativa (SVG en línea): dos halos desenfocados + un trazo fino nítido -->
+    <div class="hero-visual" aria-hidden="true">
+      <svg class="luz luz-halo-ancho" viewBox="0 0 1440 900" preserveAspectRatio="none" focusable="false">
+        <defs>
+          <!-- Se desvanece en los dos extremos de la curva -->
+          <linearGradient id="luz-durazno" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#EBA98A" stop-opacity="0"/>
+            <stop offset="0.3" stop-color="#EBA98A"/>
+            <stop offset="0.75" stop-color="#EBA98A"/>
+            <stop offset="1" stop-color="#EBA98A" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="luz-crema" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#FFF6EA" stop-opacity="0"/>
+            <stop offset="0.3" stop-color="#FFF6EA" stop-opacity="0.85"/>
+            <stop offset="0.55" stop-color="#FFF6EA"/>
+            <stop offset="0.8" stop-color="#FFF6EA" stop-opacity="0.85"/>
+            <stop offset="1" stop-color="#FFF6EA" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path stroke="url(#luz-durazno)" d="M-20 470 C 280 500, 470 740, 700 740 C 960 740, 1180 440, 1460 170"/>
+      </svg>
+      <svg class="luz luz-halo" viewBox="0 0 1440 900" preserveAspectRatio="none" focusable="false">
+        <path stroke="url(#luz-crema)" d="M-20 470 C 280 500, 470 740, 700 740 C 960 740, 1180 440, 1460 170"/>
+      </svg>
+      <svg class="luz luz-trazo" viewBox="0 0 1440 900" preserveAspectRatio="none" focusable="false">
+        <path stroke="url(#luz-crema)" d="M-20 470 C 280 500, 470 740, 700 740 C 960 740, 1180 440, 1460 170"/>
+      </svg>
     </div>
   </section>
 
@@ -243,6 +246,5 @@
 <script src="assets/content/landing.es.js"></script>
 <script src="assets/scripts/content.js"></script>
 <script src="assets/scripts/main.js"></script>
-<script src="assets/scripts/hero-scene.js" defer></script>
 </body>
 </html>

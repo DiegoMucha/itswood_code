@@ -247,9 +247,10 @@ button:focus-visible {
 
 
 /* ========================================
-   HERO: panel taupe del mismo color que el fondo de la escena de Spline
-   Arriba es más oscuro (--hero-profundo), sin cortes bruscos, para que el texto claro cumpla AA;
-   desde el 76% es --taupe-oscuro, igual que la escena, así no se ve su borde.
+   HERO: panel taupe con una curva de luz, como la referencia (ref/img_3.png)
+   Arriba es más oscuro (--hero-profundo) y aclara hacia abajo sin cortes bruscos.
+   Los tonos van más oscuros que la referencia para que el texto claro cumpla AA;
+   el resplandor bajo la curva va en .hero-visual::before.
 ======================================== */
 
 .hero {
@@ -266,8 +267,7 @@ button:focus-visible {
     text-align: center;
     color: var(--crema-texto);
     background:
-        radial-gradient(70% 45% at 50% 0%, rgba(235, 169, 138, 0.16), transparent 70%),
-        linear-gradient(180deg, var(--hero-profundo) 0%, #66523F 30%, #6D5947 52%, var(--taupe-oscuro) 76%, var(--taupe-oscuro) 100%);
+        linear-gradient(180deg, var(--hero-profundo) 0%, #644F40 28%, #6C5745 50%, #7D6855 68%, var(--taupe-oscuro) 84%, #9A8571 100%);
 }
 
 .hero a:focus-visible {
@@ -306,7 +306,7 @@ button:focus-visible {
     margin-top: 36px;
 }
 
-/* Capa decorativa: composición estática y, en escritorio, la escena de Spline */
+/* Capa decorativa: resplandor de fondo + curva de luz */
 .hero-visual {
     position: absolute;
     inset: 0;
@@ -314,14 +314,20 @@ button:focus-visible {
     pointer-events: none;
 }
 
-.hero-composicion {
+/* Resplandor cálido y suave bajo la parte baja de la curva */
+.hero-visual::before {
+    content: '';
     position: absolute;
     inset: 0;
-    transition: opacity 0.8s ease;
+    background:
+        radial-gradient(36% 26% at 49% 78%, rgba(255, 246, 234, 0.24), transparent 70%),
+        radial-gradient(55% 32% at 54% 80%, rgba(235, 169, 138, 0.18), transparent 72%),
+        radial-gradient(30% 40% at 96% 18%, rgba(255, 246, 234, 0.1), transparent 70%);
 }
 
-/* Línea de luz curva: halo difuso + trazo cobre + núcleo claro */
-.linea-luz {
+/* Curva de luz: tres copias del mismo trazo. Cada copia es su propio <svg> para que el
+   desenfoque (estático) se aplique en píxeles de pantalla y no se deforme con el viewBox. */
+.luz {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -329,120 +335,38 @@ button:focus-visible {
     overflow: visible;
 }
 
-.linea-luz path {
+.luz path {
     fill: none;
     vector-effect: non-scaling-stroke;
     stroke-linecap: round;
 }
 
-.linea-luz-halo {
-    stroke: var(--durazno);
-    stroke-width: 26;
-    opacity: 0.35;
-    filter: blur(14px);
+.luz-halo-ancho path { stroke-width: 64; }
+.luz-halo path       { stroke-width: 12; }
+.luz-trazo path      { stroke-width: 1.6; }
+
+.luz-halo-ancho {
+    filter: blur(30px);
+    opacity: 0.5;
+    transform-origin: 50% 80%;
+    animation: respirar 12s ease-in-out infinite;
 }
 
-.linea-luz-trazo {
-    stroke: url(#luz-gradiente);
-    stroke-width: 5;
-    filter: blur(1.5px);
+.luz-halo {
+    filter: blur(7px);
+    opacity: 0.75;
+    animation: respirar-suave 12s ease-in-out infinite;
 }
 
-.linea-luz-nucleo {
-    stroke: #FFFFFF;
-    stroke-width: 1.2;
-    opacity: 0.8;
+/* El halo "respira": solo opacity y transform */
+@keyframes respirar {
+    0%, 100% { opacity: 0.42; transform: scaleY(1); }
+    50%      { opacity: 0.62; transform: scaleY(1.025); }
 }
 
-/* Paneles de vidrio inclinados que flotan */
-.panel {
-    position: absolute;
-    width: clamp(120px, 13vw, 200px);
-    aspect-ratio: 3 / 4;
-    border-radius: 24px;
-    background:
-        linear-gradient(150deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.12) 60%),
-        var(--blanco-vidrio);
-    -webkit-backdrop-filter: var(--vidrio-desenfoque);
-    backdrop-filter: var(--vidrio-desenfoque);
-    border: 1px solid var(--borde-vidrio);
-    box-shadow: 0 30px 60px rgba(62, 47, 37, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-    transform: rotate(var(--giro));
-    animation: flotar 9s ease-in-out infinite;
-    animation-delay: var(--retraso, 0s);
-}
-
-/* Reflejo curvo cobre dentro del panel, como en las referencias */
-.panel::after {
-    content: '';
-    position: absolute;
-    inset: 38% -10% 18%;
-    border-top: 2px solid rgba(201, 143, 98, 0.85);
-    border-radius: 50% 50% 0 0 / 70% 70% 0 0;
-    box-shadow: 0 -6px 16px -6px rgba(235, 169, 138, 0.8);
-}
-
-.panel-1 { left: 3%;  top: 34%; --giro: -12deg; width: clamp(100px, 10vw, 160px); }
-.panel-2 { left: 11%; top: 58%; --giro: 9deg;  --retraso: -3s; width: clamp(130px, 14vw, 220px); aspect-ratio: 4 / 3; }
-.panel-3 { right: 3%; top: 26%; --giro: 10deg; --retraso: -5s; }
-.panel-4 { right: 13%; top: 58%; --giro: -8deg; --retraso: -1.5s; width: clamp(110px, 11vw, 170px); }
-
-/* Textura de piedra porosa (solo CSS) */
-.panel-piedra {
-    background:
-        radial-gradient(circle at 20% 30%, rgba(143, 122, 102, 0.55) 0 2px, transparent 3px),
-        radial-gradient(circle at 70% 60%, rgba(143, 122, 102, 0.45) 0 3px, transparent 4px),
-        radial-gradient(circle at 45% 80%, rgba(143, 122, 102, 0.4) 0 1.5px, transparent 2.5px),
-        linear-gradient(160deg, #EFE6DA, #D9CCBB);
-    background-size: 23px 19px, 41px 37px, 17px 21px, 100% 100%;
-}
-
-.esfera {
-    position: absolute;
-    border-radius: 50%;
-    background: radial-gradient(circle at 32% 28%, #FBE3D5 0%, var(--durazno) 38%, var(--cobre) 100%);
-    box-shadow: 0 24px 50px rgba(62, 47, 37, 0.3), inset -8px -12px 24px rgba(143, 90, 55, 0.35);
-    animation: flotar 11s ease-in-out infinite;
-}
-
-.esfera-grande { width: clamp(80px, 9vw, 140px); aspect-ratio: 1; right: 26%; top: 70%; animation-delay: -4s; }
-.esfera-chica  { width: clamp(36px, 3.5vw, 56px); aspect-ratio: 1; left: 15%; top: 20%; animation-delay: -2s; }
-
-@keyframes flotar {
-    0%, 100% { translate: 0 0; }
-    50%      { translate: 0 -12px; }
-}
-
-
-/* Escena de Spline (hero-scene.js). Spline escala la cinta según la ALTURA del iframe
-   (mide ~0.7 veces esa altura de largo), así que el iframe es mucho más alto que el hero:
-   1.6 veces el ancho del hero, para que la cinta cruce de borde a borde. La cinta queda
-   un 6% (de la altura del iframe) sobre su centro; se compensa para que caiga en el 76%
-   del hero, bajo los botones. El resto queda recortado, incluida la insignia de Spline.
-   La máscara funde el borde superior con el degradado, justo por encima de la cinta. */
-.hero-escena {
-    --alto-escena: calc((100vw - 2 * var(--margen-lateral)) * 1.6);
-    position: absolute;
-    left: 0;
-    top: calc(76% - var(--alto-escena) * 0.44);
-    width: 100%;
-    height: var(--alto-escena);
-    border: 0;
-    background: var(--taupe-oscuro);
-    pointer-events: none;   /* decorativa: no captura el scroll ni el mouse */
-    opacity: 0;
-    transition: opacity 0.8s ease;
-    -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 33%, #000 38%);
-    mask-image: linear-gradient(180deg, transparent 0%, transparent 33%, #000 38%);
-}
-
-.hero-visual.has-scene .hero-escena {
-    opacity: 1;
-}
-
-.hero-visual.has-scene .hero-composicion {
-    opacity: 0;
-    visibility: hidden;
+@keyframes respirar-suave {
+    0%, 100% { opacity: 0.65; }
+    50%      { opacity: 0.88; }
 }
 
 
@@ -947,7 +871,7 @@ button:focus-visible {
     }
 }
 
-/* 900px o menos: sin escena 3D (hero-scene.js no la inserta); queda la composición estática */
+/* 900px o menos: la curva de luz va en su propio bloque, bajo los botones */
 @media (max-width: 900px) {
     .hamburger {
         display: inline-grid;
@@ -1001,16 +925,6 @@ button:focus-visible {
         margin-top: 24px;
     }
 
-    .hero-escena,
-    .hero-visual.has-scene .hero-escena { display: none; }
-    .hero-visual.has-scene .hero-composicion { opacity: 1; visibility: visible; }
-
-    .panel-1 { left: 4%;  top: 8%; }
-    .panel-2 { left: 14%; top: 50%; }
-    .panel-3 { right: 4%; top: 4%; }
-    .panel-4 { right: 18%; top: 48%; }
-    .esfera-grande { right: 40%; top: 50%; }
-    .esfera-chica  { left: 42%; top: 6%; }
 
     .destacados {
         grid-template-columns: 1fr;
@@ -1095,10 +1009,6 @@ button:focus-visible {
         animation: none !important;
         transition: none !important;
     }
-
-    .hero-escena,
-    .hero-visual.has-scene .hero-escena { display: none; }
-    .hero-visual.has-scene .hero-composicion { opacity: 1; visibility: visible; }
 }
 
 main:focus {

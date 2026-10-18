@@ -11,4 +11,8 @@ window.PRIORA_CONFIG = {
     // volver absoluta la og:image.
     // TODO: completar tras el primer despliegue (p. ej. 'https://<proyecto>.vercel.app').
     SITE_URL: ''
+
+    // Ya no se usa: el hero dibuja su curva de luz en SVG/CSS (index.html).
+    // Escena de Spline anterior, por si se quiere volver a ella:
+    // SPLINE_URL: 'https://my.spline.design/claritystream-Txg1N81Wzit6iC1CdjTIFz36/'
 };
