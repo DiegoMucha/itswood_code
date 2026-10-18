@@ -12,6 +12,7 @@ const ev = require('../sim/eventos');
 const demo = require('../sim/fuente_demo');
 const { leerConfig, render, validarCambiosConfig, mensajeBienvenida } = require('../src/config');
 const { extraerFolderId, elegirHojaFuente, fechaFuente, conectarDrive } = require('../src/sync');
+const { segmentar, leerReglas, validarReglas } = require('../src/fidelizacion');
 
 const CATALOGO = leerCsv(path.join(__dirname, '..', 'hoja', 'catalogo_bot.csv'));
 const ANA = '51987000001';
@@ -225,6 +226,93 @@ test('API: GET leads ordena por prioridad y filtra por nivel', async () => {
   const altas = await llamarApi({ metodo: 'GET', ruta: 'leads', query: { nivel: 'alta' } }, e);
   assert.equal(altas.cuerpo.datos.length, 1);
   assert.equal((await llamarApi({ metodo: 'GET', ruta: 'leads', query: { nivel: 'X' } }, e)).status, 400);
+});
+
+// ---------- 5. Fidelización ----------
+
+test('fidelización: cada regla de segmento con los datos de ejemplo', () => {
+  const lista = segmentar({ clientes: demo.CLIENTES, ventas: demo.VENTAS, ahora: '2026-10-17T15:00:00Z' });
+  const de = id => lista.find(c => c.cliente_id === id).segmento;
+  assert.equal(de('C001'), 'CORPORATIVO', 'tipo EMPRESA');
+  assert.equal(de('C002'), 'VIP', '3 pedidos');
+  assert.equal(de('C003'), 'RECURRENTE', '2 pedidos');
+  assert.equal(de('C004'), 'NUEVO', '1 pedido hace 10 días');
+  assert.equal(de('C005'), 'DORMIDO', '150 días sin comprar');
+  assert.equal(de('C006'), 'OCASIONAL', '1 pedido hace 50 días');
+  assert.equal(de('C007'), 'SIN_COMPRAS');
+  // Top 10 % por total: entre 6 compradores es el primero; si no es empresa, es VIP aunque tenga 1 pedido.
+  const sinEmpresa = segmentar({ clientes: demo.CLIENTES.map(c => ({ ...c, tipo: 'PERSONA' })), ventas: demo.VENTAS, ahora: '2026-10-17T15:00:00Z' });
+  assert.equal(sinEmpresa.find(c => c.cliente_id === 'C001').segmento, 'VIP');
+});
+
+test('fidelización: la sincronización guarda el segmento y GET /segmentos los cuenta', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  conDrive(e);
+  await sincronizarDrive(e);
+  assert.equal(e.hoja.tablas.BOT_CLIENTES_FUENTE.find(c => c.cliente_id === 'C005').segmento, 'DORMIDO');
+  const r = await llamarApi({ metodo: 'GET', ruta: 'segmentos' }, e);
+  const conteo = Object.fromEntries(r.cuerpo.segmentos.map(s => [s.segmento, s.clientes]));
+  assert.deepEqual(conteo, { CORPORATIVO: 1, VIP: 1, RECURRENTE: 1, NUEVO: 1, DORMIDO: 1, OCASIONAL: 1, SIN_COMPRAS: 1 });
+  assert.equal(r.cuerpo.segmentos.find(s => s.segmento === 'DORMIDO').canal, 'WHATSAPP CON CUPÓN + RETARGETING EN META ADS');
+});
+
+test('recomendaciones: comprados juntos, segmento DORMIDO, VIP y momento de recompra', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  conDrive(e);
+  await sincronizarDrive(e);
+  const reco = async id => (await llamarApi({ metodo: 'GET', ruta: `recomendaciones/${id}` }, e)).cuerpo;
+
+  // Carla compró la tabla ROMA: lo que más se compra con ella es la posataza Koi.
+  const carla = await reco('C004');
+  assert.equal(carla.productos[0].sku, 'PR-4D383833');
+  assert.equal(carla.productos[0].motivo, 'COMPRADO_JUNTO');
+  assert.equal(carla.recompra.base, 'FRECUENCIA_DEL_SEGMENTO');
+  assert.equal(carla.recompra.proxima_compra, '2026-10-27', '1 pedido: frecuencia de NUEVO (20 días)');
+  assert.match(carla.mensaje, /^¡Gracias por tu compra, Carla!.*Posataza para cafe - Koi/);
+
+  // Diego está dormido: lo más barato con stock (el espejo no tiene stock).
+  const diego = await reco('C005');
+  assert.equal(diego.productos[0].nombre, 'CERA DE ABEJA PARA MADERA 90ML');
+  assert.equal(diego.productos[0].motivo, 'MAS_ECONOMICO_CON_STOCK');
+  assert.match(diego.mensaje, /VUELVE15.*tienda\.example/);
+
+  // Ana es VIP: primero lo de mayor ganancia; recompra por el promedio entre sus pedidos (75 y 51 días).
+  const ana = await reco('C002');
+  assert.equal(ana.productos[0].nombre, 'Mesa Picnic Plegable - YARD');
+  assert.equal(ana.recompra.base, 'PROMEDIO_ENTRE_COMPRAS');
+  assert.equal(ana.recompra.dias, 63);
+  assert.ok(ana.productos.every(p => !['PR-492A873B', 'PR-4D383833', 'PR-4966E8E6', 'PR-4A398B5B'].includes(p.sku)), 'no repite lo que ya compró');
+
+  assert.equal((await llamarApi({ metodo: 'GET', ruta: 'recomendaciones/C999' }, e)).status, 404);
+  const vips = await llamarApi({ metodo: 'GET', ruta: 'segmentos/vip/clientes' }, e);
+  assert.equal(vips.cuerpo.clientes[0].cliente_id, 'C002');
+  assert.equal(vips.cuerpo.clientes[0].recomendacion.productos.length, 3);
+});
+
+test('audiencias: CSV telefono,email solo con acepta_marketing = SI', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  conDrive(e);
+  await sincronizarDrive(e);
+  const r = await llamarApi({ metodo: 'GET', ruta: 'audiencias/DORMIDO.csv' }, e);
+  assert.equal(r.csv, 'telefono,email\n+51987000005,diego@example.com\n');
+  assert.equal(r.archivo, 'audiencia_dormido.csv');
+  const ocasional = await llamarApi({ metodo: 'GET', ruta: 'audiencias/ocasional.csv' }, e);
+  assert.equal(ocasional.total, 0, 'Elena no aceptó marketing');
+  assert.equal((await llamarApi({ metodo: 'GET', ruta: 'audiencias/OTRO.csv' }, e)).status, 400);
+});
+
+test('reglas por segmento: valores por defecto, filas de BOT_FIDELIZACION y validación del PUT', () => {
+  const reglas = leerReglas([{ segmento: 'vip', oferta: 'Regalo sorpresa', frecuencia_dias: '15', activo: 'no' }]);
+  assert.equal(reglas.VIP.oferta, 'Regalo sorpresa');
+  assert.equal(reglas.VIP.frecuencia_dias, '15');
+  assert.equal(reglas.VIP.activo, 'NO');
+  assert.equal(reglas.NUEVO.frecuencia_dias, '20');
+  assert.equal(validarReglas({ reglas: [{ segmento: 'NUEVO', oferta: 'X' }] }).filas[0].oferta, 'X');
+  assert.match(validarReglas({ reglas: [{ segmento: 'OTRO' }] }).error, /segmento debe ser/);
+  assert.match(validarReglas({ reglas: [{ segmento: 'VIP', frecuencia_dias: '0' }] }).error, /frecuencia_dias/);
 });
 
 // ---------- 7. Las 5 métricas ----------

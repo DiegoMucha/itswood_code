@@ -105,5 +105,47 @@
       "valor": "19:00",
       "descripcion": "Hora del resumen diario (HH:MM, hora de Lima)."
     }
+  ],
+  "BOT_FIDELIZACION": [
+    {
+      "segmento": "CORPORATIVO",
+      "canal": "EMAIL + ASESOR POR WHATSAPP",
+      "frecuencia_dias": "30",
+      "activo": "SI",
+      "oferta": "Descuento por volumen desde 50 unidades y logo grabado sin costo",
+      "mensaje": "Hola {nombre}, te compartimos el catálogo corporativo de {negocio}. Para tus próximos regalos te recomendamos {producto}. {oferta}. ¿Agendamos una llamada con un asesor?"
+    },
+    {
+      "segmento": "VIP",
+      "canal": "WHATSAPP PERSONAL (HUMANO)",
+      "frecuencia_dias": "45",
+      "activo": "SI",
+      "oferta": "Acceso anticipado a la nueva colección y un regalo en tu próximo pedido",
+      "mensaje": "Hola {nombre}, eres de nuestros clientes favoritos de {negocio} 🌳 {oferta}. Te separamos {producto} antes que nadie."
+    },
+    {
+      "segmento": "RECURRENTE",
+      "canal": "PLANTILLA DE WHATSAPP",
+      "frecuencia_dias": "30",
+      "activo": "SI",
+      "oferta": "10% de descuento en tu siguiente compra",
+      "mensaje": "Hola {nombre}, a quienes compraron lo mismo que tú también les encantó {producto}. {oferta} 👉 {url}"
+    },
+    {
+      "segmento": "NUEVO",
+      "canal": "EMAIL Y WHATSAPP",
+      "frecuencia_dias": "20",
+      "activo": "SI",
+      "oferta": "Cupón SEGUNDA10 para tu segunda compra",
+      "mensaje": "¡Gracias por tu compra, {nombre}! ¿Nos dejas una reseña? Como agradecimiento: {oferta}. Te podría gustar {producto}."
+    },
+    {
+      "segmento": "DORMIDO",
+      "canal": "WHATSAPP CON CUPÓN + RETARGETING EN META ADS",
+      "frecuencia_dias": "60",
+      "activo": "SI",
+      "oferta": "Cupón VUELVE15 por 15 días",
+      "mensaje": "Hola {nombre}, te extrañamos en {negocio}. Vuelve con {oferta}: {producto} te está esperando 👉 {url}"
+    }
   ]
 }

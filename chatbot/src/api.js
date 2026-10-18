@@ -15,23 +15,41 @@ const RUTAS = {
   'confirmar-orden': { metodo: 'POST' },
   leads: { metodo: 'GET' },
   metricas: { metodo: 'GET' },
+  segmentos: { metodo: 'GET' },
+  // Rutas con un parámetro en la URL (ver resolverRuta).
+  'segmento-clientes': { metodo: 'GET', url: 'segmentos/{segmento}/clientes' },
+  recomendacion: { metodo: 'GET', url: 'recomendaciones/{cliente_id}' },
+  audiencia: { metodo: 'GET', url: 'audiencias/{segmento}.csv' },
 };
 const LIMITE_MAXIMO = 500;
 const INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];
+const SEGMENTOS_API = ['CORPORATIVO', 'VIP', 'RECURRENTE', 'NUEVO', 'DORMIDO', 'OCASIONAL', 'SIN_COMPRAS'];
 
 function t(x) { return x === undefined || x === null ? '' : String(x).trim(); }
 function digitos(x) { return t(x).replace(/\D/g, ''); }
 
-// Webhook de n8n: { params: { ruta }, query, body, headers }. El método llega en el campo que n8n informe
+// Ruta de la URL (hasta tres tramos: /api/<ruta>/<id>/<accion>) -> nombre interno y parámetro.
+function resolverRuta(ruta, id, accion) {
+  const [a, b, c] = [ruta, id, accion].map(t);
+  const base = a.toLowerCase();
+  if (!b) return { nombre: base, param: '' };
+  if (base === 'segmentos' && c.toLowerCase() === 'clientes') return { nombre: 'segmento-clientes', param: b.toUpperCase() };
+  if (base === 'recomendaciones' && !c) return { nombre: 'recomendacion', param: b };
+  if (base === 'audiencias' && !c) return { nombre: 'audiencia', param: b.replace(/\.csv$/i, '').toUpperCase() };
+  return { nombre: [a, b, c].filter(Boolean).join('/').toLowerCase(), param: '' };
+}
+
+// Webhook de n8n: { params: { ruta, id, accion }, query, body, headers }. El método llega en el campo que n8n informe
 // (con varios métodos habilitados, la salida de cada método va por su propia rama; el flujo lo pasa aquí).
-function validarPeticion({ metodo, ruta, query, body, ahora }) {
+function validarPeticion({ metodo, ruta, id, accion, query, body, ahora }) {
   const q = query || {};
   const b = body && typeof body === 'object' ? body : {};
   const m = t(metodo).toUpperCase();
-  const r = t(ruta).toLowerCase();
+  const { nombre: r, param } = resolverRuta(ruta, id, accion);
   const fallo = (status, error) => ({ ok: false, status, error, ruta: r });
-  if (!RUTAS[r]) return fallo(404, `Ruta desconocida: ${r || '(vacía)'}. Rutas: ${Object.keys(RUTAS).join(', ')}.`);
-  if (RUTAS[r].metodo !== m) return fallo(405, `La ruta ${r} usa ${RUTAS[r].metodo}.`);
+  if (!RUTAS[r]) return fallo(404, `Ruta desconocida: ${r || '(vacía)'}. Rutas: ${Object.keys(RUTAS).map(k => RUTAS[k].url || k).join(', ')}.`);
+  const metodos = [].concat(RUTAS[r].metodo);
+  if (!metodos.includes(m)) return fallo(405, `La ruta ${RUTAS[r].url || r} usa ${metodos.join(' o ')}.`);
 
   const limite = Math.min(Math.max(parseInt(t(q.limite), 10) || 100, 1), LIMITE_MAXIMO);
   switch (r) {
@@ -78,6 +96,12 @@ function validarPeticion({ metodo, ruta, query, body, ahora }) {
       if (desde && hasta && desde > hasta) return fallo(400, 'desde no puede ser posterior a hasta.');
       return { ok: true, ruta: r, desde, hasta };
     }
+    case 'segmento-clientes':
+    case 'audiencia':
+      if (!SEGMENTOS_API.includes(param)) return fallo(400, `segmento debe ser ${SEGMENTOS_API.join(', ')}.`);
+      return { ok: true, ruta: r, segmento: param, limite };
+    case 'recomendacion':
+      return { ok: true, ruta: r, cliente_id: param };
     case 'cotizaciones':
       return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };
     case 'proveedores':
@@ -145,5 +169,5 @@ function respuestaMensaje(mensaje, filasSalida) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaLeads, respuestaConversacion, respuestaMensaje, RUTAS };
+  module.exports = { validarPeticion, resolverRuta, filtrarFilas, respuestaLista, respuestaLeads, respuestaConversacion, respuestaMensaje, RUTAS };
 }

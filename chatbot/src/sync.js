@@ -5,6 +5,10 @@
 // copia, nunca la fuente: si el negocio rompe su hoja, se registra el error y queda la última copia válida.
 // Sin dependencias: se usa en los nodos Code de n8n y en el simulador.
 
+// En n8n, fidelizacion.js va concatenado antes de este archivo en el nodo que valida; en Node se carga con require.
+// Se resuelve al usarla: los nodos que solo eligen la hoja o registran errores no incluyen fidelizacion.js.
+function syncSegmentar(args) { return (typeof segmentar === 'function' ? segmentar : require('./fidelizacion').segmentar)(args); }
+
 const PREFIJO_FUENTE = 'MERMIN_FUENTE';
 const MIME_SHEETS = 'application/vnd.google-apps.spreadsheet';
 const COLUMNAS_FUENTE = {
@@ -174,6 +178,12 @@ function prepararSync({ hoja, productos, clientes, ventas, ahora }) {
   const idsClientes = new Set(clis.map(c => c.cliente_id));
   const sinCliente = vents.filter(v => v.cliente_id && !idsClientes.has(v.cliente_id)).length;
   if (sinCliente) avisos.push(`VENTAS: ${sinCliente} fila(s) con cliente_id que no está en CLIENTES.`);
+  // Segmentos de fidelización recalculados en cada sincronización (columnas extra de BOT_CLIENTES_FUENTE).
+  const segmentos = Object.fromEntries(syncSegmentar({ clientes: clis, ventas: vents, ahora: ahoraIso }).map(c => [c.cliente_id, c]));
+  for (const c of clis) {
+    const s = segmentos[c.cliente_id];
+    Object.assign(c, { segmento: s.segmento, pedidos: s.pedidos, total_comprado: s.total_comprado, ultima_compra: s.ultima_compra });
+  }
   return {
     ok: true,
     errores,

@@ -16,6 +16,8 @@ const PESTANAS = {
   productos: 'BOT_PRODUCTOS',
   clientesFuente: 'BOT_CLIENTES_FUENTE',
   ventas: 'BOT_VENTAS',
+  // Reglas de canal, mensaje y oferta por segmento de fidelización (las edita el dashboard).
+  fidelizacion: 'BOT_FIDELIZACION',
   proveedores: 'PROVEEDORES',
   pautas: 'PAUTAS ',
   inventario: 'INVENTARIO',

@@ -2,24 +2,63 @@
 
 // Respuestas de las rutas del dashboard que se calculan con las pestañas del libro (métricas, configuración,
 // segmentos...). El flujo [7] lee las pestañas y llama a responderPanel; el simulador hace lo mismo.
-// En n8n se concatenan antes config.js y metricas.js; en Node se cargan con require.
+// En n8n se concatenan antes config.js, metricas.js y fidelizacion.js; en Node se cargan con require.
 
 const PANEL_DEPS = typeof calcularMetricas === 'function'
-  ? { leerConfig, calcularMetricas }
-  : { ...require('./config'), ...require('./metricas') };
+  ? { leerConfig, calcularMetricas, segmentar, conteoSegmentos, leerReglas, recomendarPara, audiencia }
+  : { ...require('./config'), ...require('./metricas'), ...require('./fidelizacion') };
+
+// Lo que el dashboard muestra de cada cliente segmentado (sin las listas internas).
+function clientePanel(c) {
+  const { fechas_pedidos, skus_comprados, ...visible } = c;
+  return visible;
+}
 
 function panelFilas(filas) {
   return (filas || []).filter(x => x && Object.keys(x).some(k => k !== 'row_number' && String(x[k] ?? '').trim() !== ''));
 }
 
 // peticion: salida de validarPeticion. datos: { config, eventos, solicitudes, conversaciones, ventas, clientes,
-// clientesFuente, productos } con las filas de cada pestaña.
+// clientesFuente, productos, fidelizacion } con las filas de cada pestaña.
 function responderPanel(peticion, datos, ahora) {
   const d = {};
   for (const k of Object.keys(datos || {})) d[k] = panelFilas(datos[k]);
   const config = PANEL_DEPS.leerConfig(d.config);
   const ahoraIso = ahora || new Date().toISOString();
+  // Los segmentos se recalculan en cada consulta: así reflejan la última sincronización aunque el día haya cambiado.
+  const segmentados = () => PANEL_DEPS.segmentar({ clientes: d.clientesFuente, ventas: d.ventas, ahora: ahoraIso });
+  const reglas = () => PANEL_DEPS.leerReglas(d.fidelizacion);
+  const recomendar = (cliente, r) => PANEL_DEPS.recomendarPara(cliente, { productos: d.productos, ventas: d.ventas, reglas: r, config, ahora: ahoraIso });
   switch (peticion.ruta) {
+    case 'segmentos': {
+      const lista = segmentados();
+      const r = reglas();
+      const conteo = PANEL_DEPS.conteoSegmentos(lista);
+      const segmentos = Object.keys(conteo).map(s => ({
+        segmento: s, clientes: conteo[s],
+        con_permiso_marketing: lista.filter(c => c.segmento === s && c.acepta_marketing === 'SI').length,
+        canal: r[s] ? r[s].canal : '', oferta: r[s] ? r[s].oferta : '', activo: r[s] ? r[s].activo : '',
+      }));
+      return { status: 200, cuerpo: { ok: true, ruta: 'segmentos', total_clientes: lista.length, ultima_sync: config.ultima_sync, segmentos } };
+    }
+    case 'segmento-clientes': {
+      const r = reglas();
+      const clientes = segmentados().filter(c => c.segmento === peticion.segmento)
+        .sort((a, b) => b.total_comprado - a.total_comprado)
+        .slice(0, peticion.limite || 100)
+        .map(c => ({ ...clientePanel(c), recomendacion: recomendar(c, r) }));
+      return { status: 200, cuerpo: { ok: true, ruta: 'segmento-clientes', segmento: peticion.segmento, total: clientes.length, clientes } };
+    }
+    case 'recomendacion': {
+      const cliente = segmentados().find(c => c.cliente_id.toUpperCase() === String(peticion.cliente_id).toUpperCase());
+      if (!cliente) return { status: 404, cuerpo: { ok: false, error: `No hay un cliente ${peticion.cliente_id} en BOT_CLIENTES_FUENTE.` } };
+      return { status: 200, cuerpo: { ok: true, ruta: 'recomendacion', cliente: clientePanel(cliente), ...recomendar(cliente, reglas()) } };
+    }
+    case 'audiencia': {
+      const a = PANEL_DEPS.audiencia(segmentados(), peticion.segmento);
+      // Respuesta de texto: el flujo la devuelve como archivo CSV.
+      return { status: 200, csv: a.csv, archivo: `audiencia_${a.segmento.toLowerCase()}.csv`, total: a.total };
+    }
     case 'metricas': {
       const metricas = PANEL_DEPS.calcularMetricas({
         config, eventos: d.eventos, solicitudes: d.solicitudes, conversaciones: d.conversaciones, ventas: d.ventas,

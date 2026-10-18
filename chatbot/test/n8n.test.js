@@ -86,7 +86,13 @@ test('flujo API: el nodo Responder panel calcula las métricas con las pestañas
     'Panel: leer BOT_CONFIG': vacio, 'Panel: leer BOT_EVENTOS': vacio, 'Panel: leer BOT_SOLICITUDES': vacio,
     'Panel: leer BOT_CONVERSACIONES': vacio, 'Panel: leer BOT_VENTAS': [{ fecha: '2026-06-01', pedido_id: 'P1', total: 100 }, { fecha: '2026-06-02', pedido_id: 'P2', total: 50 }],
     'Panel: leer BOT_CLIENTES': vacio, 'Panel: leer BOT_CLIENTES_FUENTE': demo.CLIENTES, 'Panel: leer BOT_PRODUCTOS': vacio,
+    'Panel: leer BOT_FIDELIZACION': vacio,
   };
+  const [seg] = ejecutarCodigo(api, 'Petición GET', {}, [{ params: { ruta: 'segmentos', id: 'vip', accion: 'clientes' }, query: {} }]);
+  assert.deepEqual([seg.ruta, seg.segmento], ['segmento-clientes', 'VIP']);
+  const webhooks = api.nodes.filter(n => n.type === 'n8n-nodes-base.webhook');
+  assert.deepEqual(webhooks.map(n => n.parameters.path), ['api/:ruta', 'api/:ruta/:id', 'api/:ruta/:id/:accion']);
+  assert.ok(webhooks.every(n => n.webhookId === 'itswood'));
   const [r] = ejecutarCodigo(api, 'Responder panel', datos);
   assert.equal(r.status, 200);
   assert.equal(r.cuerpo.ticket_promedio.valor, 75);

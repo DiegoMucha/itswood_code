@@ -16,6 +16,9 @@ const ordenes = require('../src/ordenes');
 const configBot = require('../src/config');
 const { COLUMNAS_FUENTE: columnasSync } = require('../src/sync');
 const COLUMNAS_ERROR = ['fecha', 'flujo', 'nodo', 'mensaje', 'ejecucion_id', 'modo'];
+const fidelizacion = require('../src/fidelizacion');
+// Columnas de las copias BOT_: las de la fuente y, en clientes, el segmento que calcula la sincronización.
+const columnasCopia = p => (p === 'CLIENTES' ? [...columnasSync.CLIENTES, ...fidelizacion.COLUMNAS_SEGMENTO] : columnasSync[p]);
 
 const RAIZ = path.join(__dirname, '..');
 const SALIDA = path.join(__dirname, 'flujos');
@@ -136,6 +139,7 @@ const NUMERICAS = {
   [T.pautas]: new Set(['CANTIDAD']),
   [T.productos]: new Set(['precio', 'costo', 'stock']),
   [T.ventas]: new Set(['cantidad', 'total']),
+  [T.clientesFuente]: new Set(['pedidos', 'total_comprado']),
 };
 const esNumerica = (tabla, c) => !!(NUMERICAS[tabla] && NUMERICAS[tabla].has(c));
 
@@ -551,34 +555,40 @@ return [{ json: {
 const PANEL_TABLAS = [
   ['config', T.config], ['eventos', T.eventos], ['solicitudes', T.solicitudes], ['conversaciones', T.conversaciones],
   ['ventas', T.ventas], ['clientes', T.clientes], ['clientesFuente', T.clientesFuente], ['productos', T.productos],
+  ['fidelizacion', T.fidelizacion],
 ];
-const ARCHIVOS_PANEL = ['config.js', 'metricas.js', 'panel.js'];
-const RUTAS_PANEL = ['metricas'];
+const ARCHIVOS_PANEL = ['config.js', 'metricas.js', 'fidelizacion.js', 'panel.js'];
+const RUTAS_PANEL = ['metricas', 'segmentos', 'segmento-clientes', 'recomendacion', 'audiencia'];
 
 function flujoApi() {
   const f = crearFlujo('ITS WOOD - API', CONFIG.idApi);
   const GET = "$('Petición GET').first().json";
-  f.nodo('API', 'n8n-nodes-base.webhook', 2, [0, 300], {
-    multipleMethods: true,
-    httpMethod: ['GET', 'POST'],
-    // Con un parámetro en la ruta, n8n publica el webhook en /webhook/<webhookId>/<path>:
-    // webhookId "itswood" + path "api/:ruta" deja la URL en /webhook/itswood/api/<ruta>.
-    path: 'api/:ruta',
-    authentication: 'headerAuth',
-    responseMode: 'responseNode',
-    options: {},
-  }, {
-    webhookId: 'itswood',
-    ...(CONFIG.credApiId ? { credentials: { httpHeaderAuth: { id: CONFIG.credApiId, name: CONFIG.credApiNombre } } } : {}),
-  });
+  // Un webhook por cantidad de tramos en la ruta. Con parámetros, n8n publica en /webhook/<webhookId>/<path>:
+  // webhookId "itswood" + path "api/:ruta" deja la URL en /webhook/itswood/api/<ruta>. Los tres comparten
+  // webhookId y n8n los distingue por la cantidad de tramos.
+  const METODOS = ['GET', 'POST', 'PUT'];
+  const webhooks = [['API', 'api/:ruta', 200], ['API con id', 'api/:ruta/:id', 420], ['API con acción', 'api/:ruta/:id/:accion', 640]];
+  for (const [nombre, ruta, y] of webhooks) {
+    f.nodo(nombre, 'n8n-nodes-base.webhook', 2, [0, y], {
+      multipleMethods: true,
+      httpMethod: METODOS,
+      path: ruta,
+      authentication: 'headerAuth',
+      responseMode: 'responseNode',
+      options: {},
+    }, {
+      webhookId: 'itswood',
+      ...(CONFIG.credApiId ? { credentials: { httpHeaderAuth: { id: CONFIG.credApiId, name: CONFIG.credApiNombre } } } : {}),
+    });
+  }
   const peticion = metodo => `
 const w = $input.first().json;
-const v = validarPeticion({ metodo: '${metodo}', ruta: (w.params || {}).ruta, query: w.query, body: w.body });
+const params = w.params || {};
+const v = validarPeticion({ metodo: '${metodo}', ruta: params.ruta, id: params.id, accion: params.accion, query: w.query, body: w.body });
 if (!v.ok) return [{ json: { ruta: 'error', status: v.status, cuerpo: { ok: false, error: v.error } } }];
 if (v.ruta === 'salud') return [{ json: { ruta: 'salud', status: 200, cuerpo: { ok: true, servicio: 'itswood-bot' } } }];
 return [{ json: v }];`;
-  codigo(f, 'Petición GET', [220, 200], ['api.js'], peticion('GET'));
-  codigo(f, 'Petición POST', [220, 420], ['api.js'], peticion('POST'));
+  METODOS.forEach((m, i) => codigo(f, `Petición ${m}`, [220, 200 + i * 220], ['api.js'], peticion(m)));
   configuracion(f, [440, 300], ['sheetId']);
   const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads', ...RUTAS_PANEL];
   switchRutas(f, 'Enrutar', [660, 300], '$json.ruta', rutas);
@@ -620,12 +630,23 @@ const datos = ${JSON.stringify(Object.fromEntries(PANEL_TABLAS.map(([clave, tabl
 for (const clave of Object.keys(datos)) datos[clave] = $(datos[clave]).all().map(i => i.json);
 return [{ json: responderPanel(peticion, datos, new Date().toISOString()) }];`);
 
+  si(f, '¿Respuesta CSV?', [1100 + lecturasPanel.length * 180, 1000], 'typeof $json.csv === \'string\'');
+  f.nodo('Responder CSV', 'n8n-nodes-base.respondToWebhook', 1.1, [1320 + lecturasPanel.length * 180, 900], {
+    respondWith: 'text',
+    responseBody: '={{ $json.csv }}',
+    options: {
+      responseCode: '={{ $json.status }}',
+      responseHeaders: { entries: [
+        { name: 'Content-Type', value: 'text/csv; charset=utf-8' },
+        { name: 'Content-Disposition', value: '=attachment; filename="{{ $json.archivo }}"' },
+      ] },
+    },
+  });
+
   responderJson(f, 'Responder', [1540, 300]);
 
-  f.conectar('API', 'Petición GET', 0);
-  f.conectar('API', 'Petición POST', 1);
-  f.conectar('Petición GET', 'Configuración');
-  f.conectar('Petición POST', 'Configuración');
+  for (const [nombre] of webhooks) METODOS.forEach((m, i) => f.conectar(nombre, `Petición ${m}`, i));
+  for (const m of METODOS) f.conectar(`Petición ${m}`, 'Configuración');
   f.conectar('Configuración', 'Enrutar');
   const salida = r => rutas.indexOf(r);
   f.conectar('Enrutar', 'Responder', salida('error'));
@@ -642,7 +663,9 @@ return [{ json: responderPanel(peticion, datos, new Date().toISOString()) }];`);
   f.conectar('Enrutar', 'Pedido de orden', salida('confirmar-orden'));
   f.cadena('Pedido de orden', 'Confirmar orden', 'Respuesta de la orden', 'Responder');
   for (const r of RUTAS_PANEL) f.conectar('Enrutar', lecturasPanel[0], salida(r));
-  f.cadena(...lecturasPanel, 'Responder panel', 'Responder');
+  f.cadena(...lecturasPanel, 'Responder panel', '¿Respuesta CSV?');
+  f.conectar('¿Respuesta CSV?', 'Responder CSV', 0);
+  f.conectar('¿Respuesta CSV?', 'Responder', 1);
   return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
 }
 
@@ -800,7 +823,7 @@ return [{ json: { hoja: elegirHojaFuente(archivos) } }];`);
   sheetsLeerDoc(f, 'Leer PRODUCTOS', [x(8), 100], HOJA, 'PRODUCTOS');
   sheetsLeerDoc(f, 'Leer CLIENTES', [x(9), 100], HOJA, 'CLIENTES');
   sheetsLeerDoc(f, 'Leer VENTAS', [x(10), 100], HOJA, 'VENTAS');
-  codigo(f, 'Validar fuente', [x(11), 300], ['sync.js'], `
+  codigo(f, 'Validar fuente', [x(11), 300], ['fidelizacion.js', 'sync.js'], `
 ${FILAS_DE}
 const carpeta = $('Carpeta a sincronizar').first().json;
 const ahora = new Date().toISOString();
@@ -817,7 +840,7 @@ return [{ json: prepararSync({ hoja: elegida.hoja || null, productos: filas('Lee
     const y = 0 + i * 160;
     sheetsLimpiar(f, `Vaciar ${etiqueta}`, [x(13), y], tabla);
     codigo(f, `Filas ${campo}`, [x(14), y], [], `return $('Validar fuente').first().json.${campo}.map(json => ({ json }));`);
-    sheetsEscribir(f, `Escribir ${etiqueta}`, [x(15), y], 'append', tabla, mapa(columnasSync[fuenteNombre], '$json', tabla));
+    sheetsEscribir(f, `Escribir ${etiqueta}`, [x(15), y], 'append', tabla, mapa(columnasCopia(fuenteNombre), '$json', tabla));
     f.conectar('¿Fuente válida?', `Vaciar ${etiqueta}`, 0);
     f.cadena(`Vaciar ${etiqueta}`, `Filas ${campo}`, `Escribir ${etiqueta}`);
   });
@@ -904,14 +927,16 @@ function main() {
     [T.cotizaciones]: [...ordenes.COLUMNAS_COTIZACION, 'notas_equipo'],
     [T.proveedores]: ordenes.COLUMNAS_PROVEEDOR,
     [T.config]: configBot.COLUMNAS_CONFIG,
-    [T.productos]: columnasSync.PRODUCTOS,
-    [T.clientesFuente]: columnasSync.CLIENTES,
-    [T.ventas]: columnasSync.VENTAS,
+    [T.productos]: columnasCopia('PRODUCTOS'),
+    [T.clientesFuente]: columnasCopia('CLIENTES'),
+    [T.ventas]: columnasCopia('VENTAS'),
+    [T.fidelizacion]: fidelizacion.COLUMNAS_FIDELIZACION,
   };
   fs.writeFileSync(path.join(RAIZ, 'hoja', 'columnas.json'), JSON.stringify(columnas, null, 2) + '\n');
   // Filas con las que nacen algunas pestañas (valores por defecto que el dashboard después edita).
   const iniciales = {
     [T.config]: configBot.filasConfigIniciales(),
+    [T.fidelizacion]: fidelizacion.REGLAS_POR_DEFECTO,
   };
   fs.writeFileSync(path.join(RAIZ, 'hoja', 'filas_iniciales.json'), JSON.stringify(iniciales, null, 2) + '\n');
   // Plantilla MERMIN_FUENTE que se entrega al negocio: cabeceras y filas de ejemplo.

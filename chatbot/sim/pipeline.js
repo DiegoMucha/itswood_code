@@ -123,7 +123,7 @@ function datosPanel(hoja) {
   return {
     config: hoja.leer(T.config), eventos: hoja.leer(T.eventos), solicitudes: hoja.leer(T.solicitudes),
     conversaciones: hoja.leer(T.conversaciones), ventas: hoja.leer(T.ventas), clientes: hoja.leer(T.clientes),
-    clientesFuente: hoja.leer(T.clientesFuente), productos: hoja.leer(T.productos),
+    clientesFuente: hoja.leer(T.clientesFuente), productos: hoja.leer(T.productos), fidelizacion: hoja.leer(T.fidelizacion),
   };
 }
 function reloj(entorno) { return (typeof entorno.ahora === 'function' ? entorno.ahora() : entorno.ahora) || new Date().toISOString(); }
@@ -131,7 +131,9 @@ function reloj(entorno) { return (typeof entorno.ahora === 'function' ? entorno.
 // Flujo "ITS WOOD - API".
 async function llamarApi({ metodo, ruta, query, body }, entorno) {
   const { hoja } = entorno;
-  const v = api.validarPeticion({ metodo, ruta, query, body });
+  // "segmentos/VIP/clientes" llega a n8n como params { ruta, id, accion }.
+  const [r, id, accion] = String(ruta || '').split('/');
+  const v = api.validarPeticion({ metodo, ruta: r, id, accion, query, body });
   if (!v.ok) return { status: v.status, cuerpo: { ok: false, error: v.error } };
   switch (v.ruta) {
     case 'salud': return { status: 200, cuerpo: { ok: true, servicio: 'itswood-bot' } };
@@ -143,7 +145,8 @@ async function llamarApi({ metodo, ruta, query, body }, entorno) {
     case 'conversacion': return api.respuestaConversacion(hoja.leer(T.conversaciones, 'wa_id', v.filtros.wa_id), v.filtros.wa_id);
     case 'solicitudes': return api.respuestaLista(v.ruta, hoja.leer(T.solicitudes), v.filtros, v.limite);
     case 'leads': return api.respuestaLeads(hoja.leer(T.solicitudes), v);
-    case 'metricas': return responderPanel(v, datosPanel(hoja), reloj(entorno));
+    case 'metricas': case 'segmentos': case 'segmento-clientes': case 'recomendacion': case 'audiencia':
+      return responderPanel(v, datosPanel(hoja), reloj(entorno));
     case 'proveedores': return api.respuestaLista(v.ruta, hoja.leer(T.proveedores), v.filtros, v.limite);
     case 'cotizaciones': return api.respuestaLista(v.ruta, hoja.leer(T.cotizaciones), v.filtros, v.limite);
     case 'confirmar-orden': {

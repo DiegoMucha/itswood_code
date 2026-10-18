@@ -143,7 +143,11 @@
     "email",
     "tipo",
     "fecha_registro",
-    "acepta_marketing"
+    "acepta_marketing",
+    "segmento",
+    "pedidos",
+    "total_comprado",
+    "ultima_compra"
   ],
   "BOT_VENTAS": [
     "fecha",
@@ -154,5 +158,13 @@
     "total",
     "canal",
     "codigo"
+  ],
+  "BOT_FIDELIZACION": [
+    "segmento",
+    "canal",
+    "mensaje",
+    "oferta",
+    "frecuencia_dias",
+    "activo"
   ]
 }
