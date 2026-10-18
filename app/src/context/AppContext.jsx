@@ -44,7 +44,11 @@ export function AppProvider({ children }) {
     if (vistas.current) {
       for (const n of lista) {
         if (!vistas.current.has(n.id) && !n.leido && n.tipo !== 'resumen') {
-          toast({ titulo: n.titulo, texto: n.texto, enlace: n.enlace, tono: n.tipo === 'derivado' ? 'coral' : 'cobre' });
+          toast({
+            titulo: n.titulo, texto: n.texto, enlace: n.enlace,
+            accion: n.tipo === 'fuente' ? 'Ver datos' : 'Ver pedido',
+            tono: n.tipo === 'derivado' ? 'coral' : n.tipo === 'fuente' ? undefined : 'cobre',
+          });
         }
       }
     }
