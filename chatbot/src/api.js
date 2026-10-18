@@ -13,6 +13,7 @@ const RUTAS = {
   proveedores: { metodo: 'GET' },
   cotizaciones: { metodo: 'GET' },
   'confirmar-orden': { metodo: 'POST' },
+  leads: { metodo: 'GET' },
 };
 const LIMITE_MAXIMO = 500;
 const INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];
@@ -61,6 +62,13 @@ function validarPeticion({ metodo, ruta, query, body, ahora }) {
       if (intencion && !INTENCIONES.includes(intencion)) return fallo(400, `intencion debe ser ${INTENCIONES.join(', ')}.`);
       return { ok: true, ruta: r, filtros: { estado: t(q.estado).toUpperCase(), wa_id: digitos(q.wa_id), intencion }, limite };
     }
+    case 'leads': {
+      const nivel = t(q.nivel).toUpperCase();
+      const orden = t(q.orden).toLowerCase() || 'prioridad';
+      if (nivel && !INTENCIONES.includes(nivel)) return fallo(400, `nivel debe ser ${INTENCIONES.join(', ')}.`);
+      if (!['prioridad', 'fecha'].includes(orden)) return fallo(400, 'orden debe ser prioridad o fecha.');
+      return { ok: true, ruta: r, filtros: { prioridad: nivel, estado: t(q.estado).toUpperCase() }, orden, limite };
+    }
     case 'cotizaciones':
       return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };
     case 'proveedores':
@@ -91,6 +99,20 @@ function respuestaLista(ruta, filas, filtros, limite) {
   return { status: 200, cuerpo: { ok: true, ruta, total: datos.length, datos } };
 }
 
+// Cola de leads para el dashboard: solicitudes con prioridad, la de mayor puntaje primero (o la más reciente).
+function respuestaLeads(filas, peticion) {
+  const p = peticion || {};
+  const todas = filtrarFilas(filas, p.filtros, LIMITE_MAXIMO * 10);
+  const puntaje = x => Number(t(x.puntaje_prioridad)) || 0;
+  const ordenadas = p.orden === 'fecha'
+    ? todas
+    : [...todas].sort((a, b) => puntaje(b) - puntaje(a) || t(b.fecha_registro).localeCompare(t(a.fecha_registro)));
+  const datos = ordenadas.slice(0, p.limite || 100);
+  const conteo = { ALTA: 0, MEDIA: 0, BAJA: 0 };
+  for (const x of todas) if (conteo[t(x.prioridad).toUpperCase()] !== undefined) conteo[t(x.prioridad).toUpperCase()] += 1;
+  return { status: 200, cuerpo: { ok: true, ruta: 'leads', orden: p.orden || 'prioridad', total: datos.length, conteo, datos } };
+}
+
 function respuestaConversacion(filas, waId) {
   const [conv] = filtrarFilas(filas, { wa_id: waId }, 1);
   if (!conv) return { status: 404, cuerpo: { ok: false, error: `No hay conversación para ${waId}.` } };
@@ -114,5 +136,5 @@ function respuestaMensaje(mensaje, filasSalida) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaConversacion, respuestaMensaje, RUTAS };
+  module.exports = { validarPeticion, filtrarFilas, respuestaLista, respuestaLeads, respuestaConversacion, respuestaMensaje, RUTAS };
 }

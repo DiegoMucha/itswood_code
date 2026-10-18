@@ -7,7 +7,7 @@
 // No escribe nada: quien lo llama guarda primero y envía después.
 
 // En n8n, config.js va concatenado antes de este archivo; en Node se carga con require.
-const CONFIG_BOT = typeof leerConfig === 'function' ? { leerConfig, render, mensajeBienvenida, urlConUtm } : require('./config');
+const CONFIG_BOT = typeof leerConfig === 'function' ? { leerConfig, render, mensajeBienvenida, urlConUtm, fraseWeb, numeroConfig } : require('./config');
 
 const ZONA_HORARIA = 'America/Lima';
 const MAX_INTENTOS = 3;
@@ -30,6 +30,7 @@ const COLUMNAS_SOLICITUD = [
   'ocasion', 'producto_id', 'producto_nombre', 'precio_unitario_ref', 'cantidad', 'total_referencial',
   'personalizacion', 'logo_media_id', 'fecha_deseada', 'fecha_confirmada', 'direccion', 'horario_entrega',
   'motivo', 'resumen', 'estado', 'intencion', 'puntaje_intencion',
+  'valor_estimado', 'ganancia_estimada', 'prioridad', 'puntaje_prioridad',
 ];
 const COLUMNAS_CLIENTE = ['wa_id', 'telefono', 'nombre', 'nombre_perfil', 'segmento', 'empresa', 'ultima_solicitud', 'actualizado_en'];
 const COLUMNAS_EVENTO = ['mensaje_id', 'fecha', 'wa_id', 'conversacion_id', 'direccion', 'tipo', 'texto', 'media_id', 'resultado', 'estado_entrega', 'detalle'];
@@ -231,6 +232,38 @@ function calcularIntencion(conv, ctx, confirmo) {
   conv.intencion = nivel;
   conv.puntaje_intencion = String(puntaje);
   return { nivel, puntaje, senales: usados };
+}
+
+// ---------- prioridad del lead ----------
+// Por cantidad, valor y ganancia (sección 4 del plan). El costo sale de BOT_PRODUCTOS (la hoja fuente del negocio);
+// sin costo se usa margen_por_defecto. Cada parte se normaliza contra un tope de BOT_CONFIG y se recorta a 1:
+//   puntaje = (0.45·ganancia + 0.35·valor + 0.20·cantidad) × 100;  ALTA ≥ umbral_alta, MEDIA ≥ umbral_media.
+
+const PESOS_PRIORIDAD = { ganancia: 0.45, valor: 0.35, cantidad: 0.20 };
+
+function costoDe(conv, ctx) {
+  const fila = ctx.productosFuente.find(p => str(p.sku).trim() === conv.producto_id)
+    || ctx.productosFuente.find(p => norm(p.nombre) && norm(p.nombre) === norm(conv.producto_nombre));
+  return fila ? numero(fila.costo) : null;
+}
+
+function calcularPrioridad(conv, ctx) {
+  const c = ctx.config;
+  const cfg = clave => CONFIG_BOT.numeroConfig(c, clave);
+  const precio = numero(conv.precio_unitario);
+  const cantidad = entero(conv.cantidad) || 0;
+  const costo = costoDe(conv, ctx);
+  const valor = precio === null ? 0 : precio * cantidad;
+  const unitaria = precio === null ? 0 : costo !== null ? Math.max(0, precio - costo) : precio * cfg('margen_por_defecto');
+  const ganancia = unitaria * cantidad;
+  const parte = (v, tope) => (tope > 0 ? Math.min(1, Math.max(0, v / tope)) : 0);
+  const puntaje = Math.round(100 * (
+    PESOS_PRIORIDAD.ganancia * parte(ganancia, cfg('tope_ganancia'))
+    + PESOS_PRIORIDAD.valor * parte(valor, cfg('tope_valor'))
+    + PESOS_PRIORIDAD.cantidad * parte(cantidad, cfg('tope_cantidad'))));
+  const nivel = puntaje >= cfg('umbral_prioridad_alta') ? 'ALTA' : puntaje >= cfg('umbral_prioridad_media') ? 'MEDIA' : 'BAJA';
+  const redondeo = n => Math.round(n * 100) / 100;
+  return { nivel, puntaje, valor: redondeo(valor), ganancia: redondeo(ganancia), con_costo: costo !== null };
 }
 
 // ---------- textos ----------
@@ -530,7 +563,7 @@ function fallo(conv, ctx, error, textoCliente) {
   ctx.respuestas.push(`${error}\n\n${preguntaActual(conv, ctx)}`);
 }
 
-function crearSolicitud(conv, ctx, motivo, textoCliente) {
+function crearSolicitud(conv, ctx, motivo, textoCliente, prioridad) {
   const hoy = fechaLocal(ctx.ahoraIso).replace(/-/g, '');
   const sufijo = Date.parse(ctx.ahoraIso).toString(36).toUpperCase().slice(-4);
   const precio = numero(conv.precio_unitario);
@@ -558,11 +591,30 @@ function crearSolicitud(conv, ctx, motivo, textoCliente) {
     direccion: conv.direccion,
     horario_entrega: conv.horario_entrega,
     motivo,
-    resumen: resumenInterno(conv, motivo, textoCliente),
+    // Las derivaciones ALTA se marcan con 🔴 para que el equipo las vea primero.
+    resumen: `${prioridad.nivel === 'ALTA' ? '🔴 ' : ''}${resumenInterno(conv, motivo, textoCliente)}`,
     estado: MODO.PENDIENTE,
     intencion: conv.intencion,
     puntaje_intencion: entero(conv.puntaje_intencion) === null ? '' : entero(conv.puntaje_intencion),
+    valor_estimado: prioridad.valor,
+    ganancia_estimada: prioridad.ganancia,
+    prioridad: prioridad.nivel,
+    puntaje_prioridad: prioridad.puntaje,
   };
+}
+
+// Aviso inmediato al negocio por un lead ALTA (sección 6 del plan).
+function avisoLeadAlta(conv, ctx, solicitud, prioridad) {
+  const cliente = conv.empresa ? `${conv.empresa}${conv.nombre ? ` (${conv.nombre})` : ''}` : conv.nombre || conv.nombre_perfil || 'Cliente';
+  return [
+    `🔴 Lead ALTA ${negocio(ctx)} (${prioridad.puntaje}/100)`,
+    `Cliente: ${cliente} · +${conv.wa_id}`,
+    `Producto: ${conv.producto_nombre || 'por definir'} × ${conv.cantidad || '?'}`,
+    `Valor estimado: ${dinero(prioridad.valor)} · Ganancia estimada: ${dinero(prioridad.ganancia)}${prioridad.con_costo ? '' : ' (margen por defecto)'}`,
+    `Solicitud: ${solicitud.solicitud_id}`,
+    `Conversación: https://wa.me/${conv.wa_id}`,
+    'Tómalo en el formulario de atención humana.',
+  ].join('\n');
 }
 
 // PAUTAS se escribe con USER_ENTERED para que las fechas queden como fechas, igual que las que llena el equipo.
@@ -605,10 +657,9 @@ function crearPauta(conv, ctx) {
 
 function derivar(conv, ctx, motivo, textoCliente) {
   const intencion = calcularIntencion(conv, ctx, motivo === 'SOLICITUD_COMPLETA');
-  const solicitud = crearSolicitud(conv, ctx, motivo, textoCliente);
+  const prioridad = calcularPrioridad(conv, ctx);
+  const solicitud = crearSolicitud(conv, ctx, motivo, textoCliente, prioridad);
   ctx.solicitud = solicitud;
-  // Filtro por intención: una BAJA se atiende igual (queda en BOT_SOLICITUDES), pero no entra a PAUTAS.
-  ctx.pauta = intencion.nivel === 'BAJA' ? null : crearPauta(conv, ctx);
   ctx.cliente = {
     wa_id: conv.wa_id, telefono: conv.telefono, nombre: conv.nombre, nombre_perfil: conv.nombre_perfil,
     segmento: conv.segmento, empresa: conv.empresa, ultima_solicitud: solicitud.solicitud_id, actualizado_en: ctx.ahoraIso,
@@ -617,11 +668,25 @@ function derivar(conv, ctx, motivo, textoCliente) {
     modo: MODO.PENDIENTE, paso: 'DERIVADO', intentos: '0', candidatos: '',
     motivo_derivacion: motivo, resumen: solicitud.resumen, solicitud_id: solicitud.solicitud_id,
   });
-  ctx.aviso = [
+
+  // Prioridad BAJA en un pedido completo: el bot lo cierra con la web y el descuento (si hay web configurada).
+  // Si el cliente pidió una persona o el bot no le entendió, se deriva igual.
+  const web = CONFIG_BOT.fraseWeb(ctx.config);
+  if (prioridad.nivel === 'BAJA' && motivo === 'SOLICITUD_COMPLETA' && web) {
+    solicitud.estado = 'CERRADO_WEB';
+    Object.assign(conv, { modo: MODO.CERRADO, paso: 'CERRADO_WEB' });
+    ctx.pauta = null;
+    ctx.respuestas.push(`¡Listo! Registré tu solicitud ${solicitud.solicitud_id} ✅\n\nPara un pedido así, lo más rápido es comprar en nuestra web: ${web}\n\nSi prefieres que una persona del equipo te atienda, escribe ASESOR.`);
+    return;
+  }
+
+  // Filtro por intención: una BAJA se atiende igual (queda en BOT_SOLICITUDES), pero no entra a PAUTAS.
+  ctx.pauta = intencion.nivel === 'BAJA' ? null : crearPauta(conv, ctx);
+  ctx.aviso = prioridad.nivel === 'ALTA' ? avisoLeadAlta(conv, ctx, solicitud, prioridad) : [
     `🔔 Nueva atención ${negocio(ctx)}`,
     `Cliente: +${conv.wa_id}${conv.nombre || conv.nombre_perfil ? ` (${conv.nombre || conv.nombre_perfil})` : ''}`,
     `Solicitud: ${solicitud.solicitud_id}`,
-    `Intención de compra: ${intencion.nivel} (${intencion.puntaje}/100)`,
+    `Intención de compra: ${intencion.nivel} (${intencion.puntaje}/100) · Prioridad: ${prioridad.nivel} (${prioridad.puntaje}/100)`,
     solicitud.resumen,
     'Toma el caso en el formulario de atención humana para responder.',
   ].join('\n');
@@ -738,13 +803,15 @@ function atender(conv, ctx, esInicio) {
 }
 
 // config: filas de BOT_CONFIG (o un objeto ya leído). Sin config se usan los valores por defecto.
-function procesar({ mensaje, conversacion, catalogo, inventario, config, ahora }) {
+// productosFuente: filas de BOT_PRODUCTOS (copia de la hoja del negocio), de donde sale el costo para la prioridad.
+function procesar({ mensaje, conversacion, catalogo, inventario, config, productosFuente, ahora }) {
   const ahoraIso = ahora || new Date().toISOString();
   const leida = conversacion && str(conversacion.wa_id) ? conversacion : null;
   const modoLeido = leida ? str(leida.modo).trim().toUpperCase() : '';
   const ctx = {
     mensaje, productos: leerCatalogo(catalogo, inventario), ahoraIso, respuestas: [],
     config: Array.isArray(config) ? CONFIG_BOT.leerConfig(config) : { ...CONFIG_BOT.leerConfig([]), ...(config || {}) },
+    productosFuente: (productosFuente || []).filter(p => p && str(p.sku).trim()),
     solicitud: null, pauta: null, cliente: null, aviso: null, eventos: [], resultado: 'PROCESADO',
   };
 
@@ -787,7 +854,7 @@ function procesar({ mensaje, conversacion, catalogo, inventario, config, ahora }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    procesar, leerCatalogo, leerInventario, buscarProductos, calcularIntencion, MODO, SECUENCIAS, MAX_TEXTO,
+    procesar, leerCatalogo, leerInventario, buscarProductos, calcularIntencion, calcularPrioridad, MODO, SECUENCIAS, MAX_TEXTO,
     COLUMNAS_CONVERSACION, COLUMNAS_EQUIPO_CONVERSACION, COLUMNAS_SOLICITUD, COLUMNAS_CLIENTE, COLUMNAS_EVENTO,
   };
 }

@@ -132,7 +132,7 @@ function driveBuscarHojas(f, nombre, pos, carpeta, extra = {}) {
 // Columnas que se escriben como número. Solo estas: en n8n una columna de tipo number convierte "" en 0,
 // y en BOT_CONVERSACIONES un 0 haría creer al bot que la cantidad ya se respondió.
 const NUMERICAS = {
-  [T.solicitudes]: new Set(['precio_unitario_ref', 'cantidad', 'total_referencial']),
+  [T.solicitudes]: new Set(['precio_unitario_ref', 'cantidad', 'total_referencial', 'valor_estimado', 'ganancia_estimada', 'puntaje_prioridad']),
   [T.pautas]: new Set(['CANTIDAD']),
   [T.productos]: new Set(['precio', 'costo', 'stock']),
   [T.ventas]: new Set(['cantidad', 'total']),
@@ -293,13 +293,15 @@ return [{ json: registrarRespuestaProveedor({ mensaje, proveedor, cotizaciones, 
   sheetsLeer(f, 'Leer catálogo', [x(6), 300], T.catalogo);
   sheetsLeer(f, 'Leer inventario', [x(6), 500], T.inventario, null, RANGO_INVENTARIO);
   sheetsLeer(f, 'Leer configuración', [x(7), 500], T.config);
+  sheetsLeer(f, 'Leer productos', [x(7), 680], T.productos);
   codigo(f, 'Motor conversacional', [x(7), 300], ['config.js', 'motor.js'], `
 const mensaje = $('Entrada').first().json;
 const conversacion = $('Leer conversación').all().map(i => i.json).find(fila => fila && String(fila.wa_id ?? '') === String(mensaje.wa_id)) || null;
 const catalogo = $('Leer catálogo').all().map(i => i.json);
 const inventario = $('Leer inventario').all().map(i => i.json);
 const config = $('Leer configuración').all().map(i => i.json);
-return [{ json: procesar({ mensaje, conversacion, catalogo, inventario, config, ahora: new Date().toISOString() }) }];`);
+const productosFuente = $('Leer productos').all().map(i => i.json);
+return [{ json: procesar({ mensaje, conversacion, catalogo, inventario, config, productosFuente, ahora: new Date().toISOString() }) }];`);
   sheetsLeer(f, 'Releer conversación', [x(8), 300], T.conversaciones, ['wa_id', expr(`${ENT}.wa_id`)]);
   codigo(f, 'Comparar modo', [x(9), 300], ['pasos.js'], `
 const motor = $('Motor conversacional').first().json;
@@ -370,7 +372,7 @@ return prepararEnvios(motor, mensaje, filas, $('Configuración').first().json.ph
   f.conectar('Guardar respuesta en la cotización', 'Marcar respuesta de proveedor');
   f.conectar('¿Cotización abierta?', 'Marcar respuesta de proveedor', 1);
   f.conectar('Proveedor', 'Leer conversación', 1);
-  f.cadena('Leer conversación', 'Leer catálogo', 'Leer inventario', 'Leer configuración', 'Motor conversacional', 'Releer conversación', 'Comparar modo', '¿Cambió el modo?');
+  f.cadena('Leer conversación', 'Leer catálogo', 'Leer inventario', 'Leer configuración', 'Leer productos', 'Motor conversacional', 'Releer conversación', 'Comparar modo', '¿Cambió el modo?');
   f.conectar('¿Cambió el modo?', 'Actualizar última entrada', 0);
   f.conectar('Actualizar última entrada', 'Marcar entrada omitida');
   f.conectar('¿Cambió el modo?', 'Guardar conversación', 1);
@@ -570,7 +572,7 @@ return [{ json: v }];`;
   codigo(f, 'Petición GET', [220, 200], ['api.js'], peticion('GET'));
   codigo(f, 'Petición POST', [220, 420], ['api.js'], peticion('POST'));
   configuracion(f, [440, 300], ['sheetId']);
-  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden'];
+  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads'];
   switchRutas(f, 'Enrutar', [660, 300], '$json.ruta', rutas);
 
   // mensaje: el bot responde por HTTP (origen "api"), sin enviar nada por WhatsApp.
@@ -588,7 +590,9 @@ return [{ json: respuestaMensaje(mensaje, $input.all().map(i => i.json)) }];`);
   codigo(f, 'Formatear lista', [1100, 440], ['api.js'], `
 const p = $('Petición GET').first().json;
 const filas = $input.all().map(i => i.json);
-const r = p.ruta === 'conversacion' ? respuestaConversacion(filas, p.filtros.wa_id) : respuestaLista(p.ruta, filas, p.filtros, p.limite);
+const r = p.ruta === 'conversacion' ? respuestaConversacion(filas, p.filtros.wa_id)
+  : p.ruta === 'leads' ? respuestaLeads(filas, p)
+  : respuestaLista(p.ruta, filas, p.filtros, p.limite);
 return [{ json: r }];`);
 
   codigo(f, 'Pedido de orden', [880, 760], [], `
@@ -614,6 +618,7 @@ return [{ json: { status: r.status || (r.ok ? 200 : 400), cuerpo: r.ok ? { ok: t
   f.cadena('Mensaje para el bot', 'Procesar mensaje', 'Respuesta del bot', 'Responder');
   f.conectar('Enrutar', 'Leer conversación', salida('conversacion'));
   f.conectar('Enrutar', 'Leer solicitudes', salida('solicitudes'));
+  f.conectar('Enrutar', 'Leer solicitudes', salida('leads'));
   f.conectar('Enrutar', 'Leer proveedores', salida('proveedores'));
   f.conectar('Enrutar', 'Leer cotizaciones', salida('cotizaciones'));
   for (const n of ['Leer conversación', 'Leer solicitudes', 'Leer proveedores', 'Leer cotizaciones']) f.conectar(n, 'Formatear lista');

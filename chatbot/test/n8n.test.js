@@ -42,6 +42,7 @@ test('nodos del subflujo: duplicado, motor, comparar modo y preparar envíos', (
   datos['Leer catálogo'] = CATALOGO;
   datos['Leer inventario'] = [{ 'ITEM ': 'TABLA QUESERA ROMA ', 'UNIDADES ': 3 }];
   datos['Leer configuración'] = [{ clave: 'nombre_bot', valor: 'Mermín' }, { clave: 'url_web', valor: 'https://tienda.example' }];
+  datos['Leer productos'] = [{}];
   const [motor] = ejecutarCodigo(flujo, 'Motor conversacional', datos);
   assert.equal(motor.conversacion.modo, 'BOT');
   assert.match(motor.respuestas[0], /ITS WOOD/);

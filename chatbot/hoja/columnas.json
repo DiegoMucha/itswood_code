@@ -59,6 +59,10 @@
     "estado",
     "intencion",
     "puntaje_intencion",
+    "valor_estimado",
+    "ganancia_estimada",
+    "prioridad",
+    "puntaje_prioridad",
     "notas_equipo"
   ],
   "BOT_CLIENTES": [

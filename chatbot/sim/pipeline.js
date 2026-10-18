@@ -40,7 +40,8 @@ async function procesarMensaje(mensaje, entorno) {
   const catalogo = hoja.leer(T.catalogo);
   const inventario = hoja.leer(T.inventario);
   const configBot = hoja.leer(T.config);
-  const motor = procesar({ mensaje, conversacion, catalogo, inventario, config: configBot, ahora: reloj() });
+  const productosFuente = hoja.leer(T.productos);
+  const motor = procesar({ mensaje, conversacion, catalogo, inventario, config: configBot, productosFuente, ahora: reloj() });
 
   const verificacion = verificarCambioModo(motor, hoja.leer(T.conversaciones, 'wa_id', mensaje.wa_id));
   if (verificacion.cambio) {
@@ -130,6 +131,7 @@ async function llamarApi({ metodo, ruta, query, body }, entorno) {
     }
     case 'conversacion': return api.respuestaConversacion(hoja.leer(T.conversaciones, 'wa_id', v.filtros.wa_id), v.filtros.wa_id);
     case 'solicitudes': return api.respuestaLista(v.ruta, hoja.leer(T.solicitudes), v.filtros, v.limite);
+    case 'leads': return api.respuestaLeads(hoja.leer(T.solicitudes), v);
     case 'proveedores': return api.respuestaLista(v.ruta, hoja.leer(T.proveedores), v.filtros, v.limite);
     case 'cotizaciones': return api.respuestaLista(v.ruta, hoja.leer(T.cotizaciones), v.filtros, v.limite);
     case 'confirmar-orden': {

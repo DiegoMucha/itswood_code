@@ -163,4 +163,68 @@ test('drive: conectar la carpeta valida la URL y pide compartirla con la cuenta 
   assert.deepEqual(ok.config.map(c => [c.clave, c.valor]), [['drive_folder_id', '1AbC_dEfGhIjKlMn'], ['sheet_fuente_id', 'SHEET_FUENTE']]);
 });
 
+// ---------- 4. Prioridad por cantidad, valor y ganancia ----------
+
+const PEDIDO_PERSONA = (producto, cantidad, opcion = '1') => ['Hola', '2', producto, opcion, String(cantidad), 'no', 'sin fecha', 'Ana', 'Av. Larco 123, Miraflores', 'tardes', '1'];
+
+test('prioridad: 50 posatazas es ALTA, usa el costo de BOT_PRODUCTOS y avisa al negocio con 🔴', async () => {
+  const e = entorno();
+  conDrive(e);
+  await sincronizarDrive(e);
+  // En la lista de "posataza koi", la 3 es Posataza para cafe - Koi (S/ 45).
+  await conversar(e, ANA, PEDIDO_PERSONA('posataza koi', 50, '3'));
+  const [sol] = e.hoja.tablas.BOT_SOLICITUDES;
+  assert.equal(sol.valor_estimado, 2250);
+  assert.equal(sol.ganancia_estimada, 1350, '(45 - 18) × 50 con el costo de la hoja fuente');
+  assert.equal(sol.prioridad, 'ALTA');
+  assert.ok(sol.puntaje_prioridad >= 70, `puntaje ${sol.puntaje_prioridad}`);
+  assert.match(sol.resumen, /^🔴 /);
+  assert.equal(e.conv(ANA).modo, 'PENDIENTE_HUMANO');
+  const aviso = e.enviados.find(x => x.aviso);
+  assert.equal(aviso.to, '51999000111', 'destino de BOT_CONFIG.avisos_whatsapp');
+  assert.match(aviso.texto, /🔴 Lead ALTA ITS WOOD/);
+  assert.match(aviso.texto, /Valor estimado: S\/ 2,250\.00 · Ganancia estimada: S\/ 1,350\.00/);
+  assert.match(aviso.texto, /https:\/\/wa\.me\/51987000001/);
+});
+
+test('prioridad: sin costo usa margen_por_defecto; MEDIA va a PAUTAS como hoy', async () => {
+  const e = entorno();
+  await conversar(e, ANA, PEDIDO_PERSONA('roma', 20));
+  const [sol] = e.hoja.tablas.BOT_SOLICITUDES;
+  assert.equal(sol.ganancia_estimada, 680, '85 × 20 × 0.40');
+  assert.equal(sol.prioridad, 'MEDIA');
+  assert.equal(e.hoja.tablas['PAUTAS '].length, 1);
+  assert.match(e.enviados.find(x => x.aviso).texto, /Nueva atención ITS WOOD/);
+});
+
+test('prioridad: un pedido BAJA se cierra con la web y el descuento; ASESOR lo pasa a una persona', async () => {
+  const e = entorno();
+  const respuestas = [];
+  for (const m of PEDIDO_PERSONA('roma', 2)) respuestas.push(...await e.cliente(ANA, m));
+  assert.match(respuestas.at(-1), /comprar en nuestra web/);
+  assert.match(respuestas.at(-1), /WEB10/);
+  assert.match(respuestas.at(-1), /escribe ASESOR/);
+  const [sol] = e.hoja.tablas.BOT_SOLICITUDES;
+  assert.equal(sol.prioridad, 'BAJA');
+  assert.equal(sol.estado, 'CERRADO_WEB');
+  assert.equal(e.conv(ANA).modo, 'CERRADO');
+  assert.equal(e.hoja.tablas['PAUTAS '].length, 0);
+  assert.equal(e.enviados.filter(x => x.aviso).length, 0);
+  assert.match((await e.cliente(ANA, 'asesor'))[0], /Te comunico con una persona/);
+  assert.equal(e.conv(ANA).modo, 'PENDIENTE_HUMANO');
+});
+
+test('API: GET leads ordena por prioridad y filtra por nivel', async () => {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  await conversar(e, ANA, PEDIDO_PERSONA('roma', 20));
+  await conversar(e, LUIS, PEDIDO_PERSONA('mesa picnic yard', 30));
+  const r = await llamarApi({ metodo: 'GET', ruta: 'leads', query: { orden: 'prioridad' } }, e);
+  assert.deepEqual(r.cuerpo.datos.map(x => x.prioridad), ['ALTA', 'MEDIA']);
+  assert.deepEqual(r.cuerpo.conteo, { ALTA: 1, MEDIA: 1, BAJA: 0 });
+  const altas = await llamarApi({ metodo: 'GET', ruta: 'leads', query: { nivel: 'alta' } }, e);
+  assert.equal(altas.cuerpo.datos.length, 1);
+  assert.equal((await llamarApi({ metodo: 'GET', ruta: 'leads', query: { nivel: 'X' } }, e)).status, 400);
+});
+
 module.exports = { entorno, conversar, conDrive, ANA, LUIS, CONFIG_DEMO };
