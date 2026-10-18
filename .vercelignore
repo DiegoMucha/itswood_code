@@ -4,11 +4,13 @@ ref/
 .idea/
 .env
 .env.*
-README.md
+
+# Solo los de la raíz del repo: app/ y landing/ conservan los suyos
+/README.md
 
 # Plantilla del IDE (sin versionar): no forma parte del sitio estático
-index.js
-package.json
+/index.js
+/package.json
 
 # Fuente de la imagen OG (no es parte del sitio)
 tools/
