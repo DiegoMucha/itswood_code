@@ -9,6 +9,9 @@ window.PRIORA_CONTENT = {
     marca: 'Priora',
     saltarContenido: 'Ir al contenido principal',
 
+    // Correo de contacto: solo se muestra en el cierre ("Escríbenos") y en el pie
+    correo: 'priora2026@gmail.com',
+
     nav: {
         inicioAria: 'Priora, ir al inicio',
         menuAria: 'Abrir menú de navegación',
@@ -30,11 +33,16 @@ window.PRIORA_CONTENT = {
         ctaSecundario: 'Ver demo'
     },
 
-    // Tarjetas de vidrio bajo el hero: una cifra, una característica y un testimonio
+    // Tarjetas de vidrio bajo el hero
     destacados: {
-        cifra: { valor: '3 pasos', texto: 'Tus clientes escriben, Priora atiende y tú confirmas.' },
+        cifra: { valor: '3 pasos', texto: 'Tus clientes te escriben por WhatsApp, Priora atiende y tú confirmas.' },
         caracteristica: { titulo: 'Primero lo que más vale', texto: 'Tu tablero ordena los pedidos por prioridad, no por llegada.' },
-        testimonio: { cita: '[POR COMPLETAR] Testimonio real de ITS WOOD al cerrar el piloto.', autor: 'ITS WOOD, Lima' }
+        // Paráfrasis, no cita textual: aún no hay testimonio con permiso para publicar
+        voz: {
+            titulo: 'El problema, en palabras de una dueña',
+            texto: 'En temporada alta no alcanzo a responder a todos, y la información de los pedidos se pierde entre chats.',
+            rotulo: 'ITS WOOD, Lima'
+        }
     },
 
     problema: {
@@ -52,7 +60,7 @@ window.PRIORA_CONTENT = {
         etiqueta: 'Cómo funciona',
         titulo: 'Tres pasos. Tú sigues al mando.',
         pasos: [
-            { numero: '01', titulo: 'Tus clientes escriben.', texto: 'Preguntan por el chat de tu negocio, a cualquier hora.' },
+            { numero: '01', titulo: 'Tus clientes escriben.', texto: 'Tus clientes te escriben por WhatsApp, a cualquier hora.' },
             { numero: '02', titulo: 'Priora los atiende.', texto: 'Responde lo simple con tu catálogo, tu tono y tus reglas.' },
             { numero: '03', titulo: 'Tú confirmas.', texto: 'Ves primero los pedidos que más valen y decides.' }
         ]
@@ -84,28 +92,34 @@ window.PRIORA_CONTENT = {
         bajada: 'Regalos en madera, en Lima.',
         bloques: [
             { titulo: 'El reto', texto: 'Responder a tiempo en temporada alta, cuando los mensajes llegan todos juntos.' },
-            { titulo: 'Lo que hace Priora', texto: 'Atiende las consultas simples y le muestra a la dueña primero los pedidos que más valen.' },
-            { titulo: 'Resultados', texto: '[POR COMPLETAR] Los publicaremos cuando estén validados con ITS WOOD.' }
+            { titulo: 'Lo que hará Priora', texto: 'Atender por WhatsApp las consultas simples y mostrarle a la dueña primero los pedidos que más valen.' }
         ],
-        nota: '[SUPUESTO] Piloto en curso; aún no hay cifras validadas.'
+        // Diagnóstico, NO resultados: el piloto aún no empieza. Solo porcentajes, sin montos.
+        // TODO: confirmar con la dueña de ITS WOOD que estos datos se pueden publicar;
+        // si no, cambiarlos por texto cualitativo.
+        diagnostico: {
+            titulo: 'Diagnóstico con datos reales de ITS WOOD (jun–oct 2026)',
+            puntos: [
+                'Los pedidos de 12 unidades o más son la mitad de los pedidos, pero cerca del 86 % del ingreso.',
+                'WhatsApp concentra alrededor de la mitad de las ventas.'
+            ]
+        },
+        nota: 'En validación con ITS WOOD.'
     },
 
     demo: {
         etiqueta: 'Demo',
         titulo: 'Mira a Priora en acción.',
         texto: 'Prueba cómo atiende a un cliente y cómo se ve tu tablero.',
-        cta: 'Ver demo',
-        href: '/demo/'
+        nota: 'En la demo, el chat es una simulación de WhatsApp.',
+        cta: 'Ver demo'
     },
 
     cierre: {
         titulo: 'Que ningún pedido importante se quede esperando.',
         texto: 'Cuéntanos de tu negocio y vemos juntos si Priora es para ti.',
         cta: 'Quiero Priora',
-        correoEtiqueta: 'O escríbenos a',
-        // Correo de contacto: al completarlo, el botón abre el correo (mailto)
-        correo: '',
-        correoFaltante: '[POR COMPLETAR] correo de contacto'
+        escribenos: 'Escríbenos'
     },
 
     footer: {

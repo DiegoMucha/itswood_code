@@ -3,6 +3,48 @@
 
 
 // ============================================
+// APP LINKS (APP_URL en assets/scripts/config.js)
+// Con una URL real: data-app-path="/app" -> APP_URL + "/app".
+// Mientras APP_URL sea '#': se ocultan los nodos data-requiere-app (sección Demo, "Ver demo")
+// y los links del navbar que apuntan a ellos; el resto de botones conserva su href (#contacto).
+// ============================================
+
+var siteConfig = window.PRIORA_CONFIG || {};
+var appUrl = (siteConfig.APP_URL || '').replace(/\/+$/, '');
+var hasApp = /^https?:\/\//.test(appUrl);
+
+if (hasApp) {
+    document.querySelectorAll('[data-app-path]').forEach(function (link) {
+        link.setAttribute('href', appUrl + link.getAttribute('data-app-path'));
+    });
+} else {
+    document.querySelectorAll('[data-requiere-app]').forEach(function (element) {
+        element.hidden = true;
+        if (!element.id) return;
+        document.querySelectorAll('.nav-link[href="#' + element.id + '"]').forEach(function (link) {
+            link.closest('li').hidden = true;
+        });
+    });
+}
+
+
+// ============================================
+// SEO: og:url y og:image absoluta desde SITE_URL (config.js)
+// Las redes que no ejecutan JS solo verán la og:image relativa: al tener la URL final,
+// conviene escribirla también en el <head> de index.html.
+// ============================================
+
+var siteUrl = (siteConfig.SITE_URL || '').replace(/\/+$/, '');
+
+if (/^https?:\/\//.test(siteUrl)) {
+    var ogUrl = document.querySelector('meta[property="og:url"]');
+    var ogImage = document.querySelector('meta[property="og:image"]');
+    if (ogUrl) ogUrl.setAttribute('content', siteUrl + '/');
+    if (ogImage) ogImage.setAttribute('content', siteUrl + '/' + ogImage.getAttribute('content').replace(/^\/+/, ''));
+}
+
+
+// ============================================
 // MOBILE MENU
 // ============================================
 

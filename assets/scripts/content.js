@@ -3,7 +3,7 @@
 // aparezca de inmediato y nunca después de la escena 3D.
 //   data-text="hero.titulo"          -> textContent del nodo
 //   data-aria-label="nav.menuAria"   -> atributo aria-label
-//   data-href="demo.href"            -> atributo href
+//   data-href="seccion.url"          -> atributo href
 //   data-list="incluye.items"        -> clona el <template> hijo por cada elemento;
 //                                       dentro, data-item="titulo" lee del elemento
 //                                       (data-item="." usa el elemento entero, para listas de textos)
@@ -59,20 +59,9 @@
         element.setAttribute('href', read(content, element.getAttribute('data-href')));
     });
 
-    // Correo de contacto: sin dato, se muestra el marcador y el botón lleva a la sección de cierre
-    var email = content.cierre && content.cierre.correo;
+    // Correo de contacto: data-email abre el correo; con data-email-visible también lo muestra
     document.querySelectorAll('[data-email]').forEach(function (element) {
-        if (email) {
-            setText(element, email);
-            element.setAttribute('href', 'mailto:' + email);
-        } else {
-            setText(element, content.cierre.correoFaltante);
-            element.removeAttribute('href');
-        }
+        element.setAttribute('href', 'mailto:' + content.correo);
+        if (element.hasAttribute('data-email-visible')) setText(element, content.correo);
     });
-    if (email) {
-        document.querySelectorAll('[data-email-cta]').forEach(function (element) {
-            element.setAttribute('href', 'mailto:' + email + '?subject=' + encodeURIComponent('Quiero Priora'));
-        });
-    }
 })();
