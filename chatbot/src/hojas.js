@@ -12,6 +12,10 @@ const PESTANAS = {
   errores: 'BOT_ERRORES',
   cotizaciones: 'BOT_COTIZACIONES',
   config: 'BOT_CONFIG',
+  // Copias de la hoja fuente MERMIN_FUENTE (carpeta de Drive), escritas por el flujo [8] Sincronizar Drive.
+  productos: 'BOT_PRODUCTOS',
+  clientesFuente: 'BOT_CLIENTES_FUENTE',
+  ventas: 'BOT_VENTAS',
   proveedores: 'PROVEEDORES',
   pautas: 'PAUTAS ',
   inventario: 'INVENTARIO',

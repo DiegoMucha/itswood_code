@@ -10,6 +10,8 @@ const { decidirAccionHumana } = require('../src/humano');
 const { PESTANAS: T, COLUMNAS_PAUTAS } = require('../src/hojas');
 const { prepararCotizaciones, identificarProveedor, registrarRespuestaProveedor, COLUMNAS_COTIZACION } = require('../src/ordenes');
 const api = require('../src/api');
+const { leerConfig } = require('../src/config');
+const { elegirHojaFuente, prepararSync, filaErrorSync } = require('../src/sync');
 
 function elegir(obj, columnas) { return Object.fromEntries(columnas.map(c => [c, obj[c] === undefined || obj[c] === null ? '' : obj[c]])); }
 
@@ -138,6 +140,30 @@ async function llamarApi({ metodo, ruta, query, body }, entorno) {
   }
 }
 
+// Flujo "Mermín - Sincronizar Drive". entorno.drive simula Drive: listar(folderId) y leer(sheetId, pestaña).
+async function sincronizarDrive(entorno) {
+  const { hoja, drive } = entorno;
+  const reloj = () => (typeof entorno.ahora === 'function' ? entorno.ahora() : entorno.ahora) || new Date().toISOString();
+  const config = leerConfig(hoja.leer(T.config));
+  let r;
+  if (!config.drive_folder_id) {
+    r = { ok: false, errores: ['Falta conectar la carpeta de Drive (POST /config/drive).'], ahora: reloj() };
+  } else {
+    const fuente = elegirHojaFuente(drive.listar(config.drive_folder_id));
+    const leer = pestana => (fuente ? drive.leer(fuente.id, pestana) : []);
+    r = prepararSync({ hoja: fuente, productos: leer('PRODUCTOS'), clientes: leer('CLIENTES'), ventas: leer('VENTAS'), ahora: reloj() });
+  }
+  if (!r.ok) {
+    hoja.agregar(T.errores, filaErrorSync(r));
+    return r;
+  }
+  hoja.reemplazar(T.productos, r.productos);
+  hoja.reemplazar(T.clientesFuente, r.clientes);
+  hoja.reemplazar(T.ventas, r.ventas);
+  for (const fila of r.config) hoja.guardar(T.config, 'clave', fila);
+  return r;
+}
+
 // Flujo "ITS WOOD - Entrada WhatsApp": un webhook puede traer varios mensajes; se procesan uno a uno.
 async function recibirWebhook(cuerpo, entorno) {
   const resultados = [];
@@ -174,4 +200,4 @@ async function accionHumana(formulario, entorno) {
   }
 }
 
-module.exports = { procesarMensaje, recibirWebhook, accionHumana, confirmarOrden, llamarApi };
+module.exports = { procesarMensaje, recibirWebhook, accionHumana, confirmarOrden, llamarApi, sincronizarDrive };

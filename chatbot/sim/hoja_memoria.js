@@ -51,6 +51,12 @@ class HojaMemoria {
     else this.tablas[tabla].push({ ...fila });
   }
 
+  // clear (conservando la cabecera) + append: así vuelca la sincronización de Drive.
+  reemplazar(tabla, filas) {
+    this._antes('reemplazar', tabla);
+    this.tablas[tabla] = (filas || []).map(f => ({ ...f }));
+  }
+
   // update: solo si la fila existe.
   actualizar(tabla, clave, fila) {
     this._antes('actualizar', tabla);

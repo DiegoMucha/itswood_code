@@ -14,6 +14,8 @@ const motor = require('../src/motor');
 const { PESTANAS: T, RANGO_INVENTARIO, COLUMNAS_PAUTAS } = require('../src/hojas');
 const ordenes = require('../src/ordenes');
 const configBot = require('../src/config');
+const { COLUMNAS_FUENTE: columnasSync } = require('../src/sync');
+const COLUMNAS_ERROR = ['fecha', 'flujo', 'nodo', 'mensaje', 'ejecucion_id', 'modo'];
 
 const RAIZ = path.join(__dirname, '..');
 const SALIDA = path.join(__dirname, 'flujos');
@@ -23,7 +25,10 @@ function cargarConfig(conLocal) {
   const config = {
     sheetId: 'PEGAR_ID_DE_LA_HOJA', phoneNumberId: 'PEGAR_PHONE_NUMBER_ID', waAvisos: '',
     // IDs de los flujos en n8n: con ellos, reimportar actualiza los flujos en vez de duplicarlos.
-    idProcesar: '', idEntrada: '', idHumano: '', idErrores: '', idPrueba: '', idConfirmar: '', idApi: '',
+    idProcesar: '', idEntrada: '', idHumano: '', idErrores: '', idPrueba: '', idConfirmar: '', idApi: '', idSync: '',
+    // Carpeta que vigila el Google Drive Trigger (el resto del flujo usa BOT_CONFIG.drive_folder_id) y correo de la
+    // cuenta de servicio, que la API muestra para que el negocio comparta la carpeta.
+    driveFolderId: '', correoServicio: '',
     // Credenciales ya creadas en n8n (solo id y nombre; los secretos quedan en n8n).
     credGoogleId: '', credGoogleNombre: '', credPruebaId: '', credPruebaNombre: '', credApiId: '', credApiNombre: '',
   };
@@ -94,12 +99,43 @@ function sheetsLeer(f, nombre, pos, tabla, filtro, rango) {
   return f.nodo(nombre, 'n8n-nodes-base.googleSheets', 4.5, pos, parameters, { alwaysOutputData: true, executeOnce: true, ...credencialesSheets() });
 }
 
+// Lectura de otra hoja (la fuente de Drive): el documento llega por expresión. Si la pestaña no existe, sigue vacía.
+function sheetsLeerDoc(f, nombre, pos, documento, tabla) {
+  return f.nodo(nombre, 'n8n-nodes-base.googleSheets', 4.5, pos, {
+    ...autenticacionSheets(), resource: 'sheet', operation: 'read',
+    documentId: { __rl: true, value: expr(documento), mode: 'id' }, sheetName: pestaña(tabla), options: {},
+  }, { alwaysOutputData: true, executeOnce: true, onError: 'continueRegularOutput', ...credencialesSheets() });
+}
+
+// Borra las filas de una pestaña y deja la cabecera (la sincronización reescribe la copia completa).
+function sheetsLimpiar(f, nombre, pos, tabla) {
+  return f.nodo(nombre, 'n8n-nodes-base.googleSheets', 4.5, pos, {
+    ...autenticacionSheets(), resource: 'sheet', operation: 'clear', documentId: doc(), sheetName: pestaña(tabla),
+    clear: 'wholeSheet', keepFirstRow: true,
+  }, { executeOnce: true, ...credencialesSheets() });
+}
+
+// Hojas de cálculo dentro de una carpeta de Drive, con la misma cuenta de servicio que Sheets.
+function driveBuscarHojas(f, nombre, pos, carpeta, extra = {}) {
+  return f.nodo(nombre, 'n8n-nodes-base.googleDrive', 3, pos, {
+    ...autenticacionSheets(),
+    resource: 'fileFolder',
+    searchMethod: 'query',
+    queryString: expr(`"'" + ${carpeta} + "' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false"`),
+    returnAll: true,
+    filter: {},
+    options: { fields: ['id', 'name', 'mimeType'] },
+  }, { alwaysOutputData: true, executeOnce: true, ...credencialesSheets(), ...extra });
+}
+
 // valores: { columna: expresión }. clave: columna de coincidencia para update/appendOrUpdate.
 // Columnas que se escriben como número. Solo estas: en n8n una columna de tipo number convierte "" en 0,
 // y en BOT_CONVERSACIONES un 0 haría creer al bot que la cantidad ya se respondió.
 const NUMERICAS = {
   [T.solicitudes]: new Set(['precio_unitario_ref', 'cantidad', 'total_referencial']),
   [T.pautas]: new Set(['CANTIDAD']),
+  [T.productos]: new Set(['precio', 'costo', 'stock']),
+  [T.ventas]: new Set(['cantidad', 'total']),
 };
 const esNumerica = (tabla, c) => !!(NUMERICAS[tabla] && NUMERICAS[tabla].has(c));
 
@@ -687,6 +723,109 @@ return [{ json: {
   return f.exportar({ executionOrder: 'v1', timezone: 'America/Lima', saveDataSuccessExecution: 'none', saveDataErrorExecution: 'all' });
 }
 
+// ---------- 8. Sincronizar Drive ----------
+// La hoja MERMIN_FUENTE de la carpeta de Drive se copia a BOT_PRODUCTOS, BOT_CLIENTES_FUENTE y BOT_VENTAS.
+// Corre cada 10 minutos, cuando cambia un archivo de la carpeta y cuando la API lo pide (POST /sync).
+// Salida (para la API): { ok, errores, avisos, resumen, ultima_sync }.
+
+// Lee filas de un nodo que puede no haberse ejecutado (rama no tomada): vacío en ese caso.
+const FILAS_DE = "const filasDe = nombre => { try { return $(nombre).all().map(i => i.json); } catch (e) { return []; } };";
+
+function filasConfig(f, nombre, pos, origen) {
+  codigo(f, nombre, pos, [], `return (${origen}).map(json => ({ json }));`);
+}
+function guardarConfig(f, nombre, pos) {
+  return sheetsEscribir(f, nombre, pos, 'appendOrUpdate', T.config, {
+    clave: expr('$json.clave'), valor: expr('$json.valor'), descripcion: expr('$json.descripcion'),
+  }, 'clave');
+}
+
+function flujoSync() {
+  const f = crearFlujo('Mermín - Sincronizar Drive', CONFIG.idSync);
+  const VAL = "$('Validar fuente').first().json";
+  const CARP = "$('Carpeta a sincronizar').first().json";
+  const x = i => i * 220;
+  f.nodo('Cada 10 minutos', 'n8n-nodes-base.scheduleTrigger', 1.2, [x(0), 100], { rule: { interval: [{ field: 'minutes', minutesInterval: 10 }] } });
+  f.nodo('Cambio en la carpeta', 'n8n-nodes-base.googleDriveTrigger', 1, [x(0), 300], {
+    ...autenticacionSheets(),
+    triggerOn: 'specificFolder',
+    folderToWatch: { __rl: true, value: CONFIG.driveFolderId || 'PEGAR_ID_DE_LA_CARPETA', mode: 'id' },
+    event: 'fileUpdated',
+    options: {},
+    pollTimes: { item: [{ mode: 'everyMinute' }] },
+  }, {
+    ...credencialesSheets(),
+    // Sin carpeta en config.local.json queda desactivado: el Schedule y POST /sync siguen funcionando.
+    disabled: !CONFIG.driveFolderId,
+    notes: 'Vigila la carpeta de config.local.json (driveFolderId). Si se conecta otra carpeta desde el dashboard, cámbiala aquí.',
+  });
+  f.nodo('Desde la API', 'n8n-nodes-base.executeWorkflowTrigger', 1.1, [x(0), 500], { inputSource: 'passthrough' });
+  configuracion(f, [x(1), 300], ['sheetId']);
+  sheetsLeer(f, 'Leer configuración', [x(2), 300], T.config);
+  codigo(f, 'Carpeta a sincronizar', [x(3), 300], ['config.js'], `
+const config = leerConfig($input.all().map(i => i.json));
+return [{ json: config.drive_folder_id
+  ? { ok: true, folder_id: config.drive_folder_id }
+  : { ok: false, error: 'Falta conectar la carpeta de Drive (POST /config/drive).' } }];`);
+  si(f, '¿Hay carpeta?', [x(4), 300], '$json.ok');
+  driveBuscarHojas(f, 'Buscar hojas en la carpeta', [x(5), 200], `${CARP}.folder_id`, { onError: 'continueRegularOutput' });
+  codigo(f, 'Elegir hoja fuente', [x(6), 200], ['sync.js'], `
+const archivos = $input.all().map(i => i.json).filter(a => a && a.id);
+return [{ json: { hoja: elegirHojaFuente(archivos) } }];`);
+  si(f, '¿Hay hoja fuente?', [x(7), 200], '!!$json.hoja');
+  const HOJA = "$('Elegir hoja fuente').first().json.hoja.id";
+  sheetsLeerDoc(f, 'Leer PRODUCTOS', [x(8), 100], HOJA, 'PRODUCTOS');
+  sheetsLeerDoc(f, 'Leer CLIENTES', [x(9), 100], HOJA, 'CLIENTES');
+  sheetsLeerDoc(f, 'Leer VENTAS', [x(10), 100], HOJA, 'VENTAS');
+  codigo(f, 'Validar fuente', [x(11), 300], ['sync.js'], `
+${FILAS_DE}
+const carpeta = $('Carpeta a sincronizar').first().json;
+const ahora = new Date().toISOString();
+if (!carpeta.ok) return [{ json: { ok: false, errores: [carpeta.error], avisos: [], ahora } }];
+const elegida = filasDe('Elegir hoja fuente')[0] || {};
+// Una pestaña que no existe devuelve un error (onError continúa): se toma como vacía.
+const filas = nombre => filasDe(nombre).filter(r => r && !r.error);
+return [{ json: prepararSync({ hoja: elegida.hoja || null, productos: filas('Leer PRODUCTOS'), clientes: filas('Leer CLIENTES'), ventas: filas('Leer VENTAS'), ahora }) }];`);
+  si(f, '¿Fuente válida?', [x(12), 300], '$json.ok');
+
+  // Fuente válida: cada pestaña en su rama (una pestaña vacía no detiene a las demás).
+  const ramas = [['productos', 'BOT_PRODUCTOS', T.productos, 'PRODUCTOS'], ['clientes', 'BOT_CLIENTES_FUENTE', T.clientesFuente, 'CLIENTES'], ['ventas', 'BOT_VENTAS', T.ventas, 'VENTAS']];
+  ramas.forEach(([campo, etiqueta, tabla, fuenteNombre], i) => {
+    const y = 0 + i * 160;
+    sheetsLimpiar(f, `Vaciar ${etiqueta}`, [x(13), y], tabla);
+    codigo(f, `Filas ${campo}`, [x(14), y], [], `return $('Validar fuente').first().json.${campo}.map(json => ({ json }));`);
+    sheetsEscribir(f, `Escribir ${etiqueta}`, [x(15), y], 'append', tabla, mapa(columnasSync[fuenteNombre], '$json', tabla));
+    f.conectar('¿Fuente válida?', `Vaciar ${etiqueta}`, 0);
+    f.cadena(`Vaciar ${etiqueta}`, `Filas ${campo}`, `Escribir ${etiqueta}`);
+  });
+  filasConfig(f, 'Estado de la sincronización', [x(13), 480], `${VAL}.config`);
+  guardarConfig(f, 'Guardar ultima_sync', [x(14), 480]);
+
+  // Fuente inválida o sin carpeta: se registra el error y la copia anterior queda como estaba.
+  codigo(f, 'Fila de error', [x(13), 640], ['sync.js'], `
+return [{ json: { ...filaErrorSync($('Validar fuente').first().json), ejecucion_id: String($execution.id || '') } }];`);
+  sheetsEscribir(f, 'Registrar error de sync', [x(14), 640], 'append', T.errores, mapa(COLUMNAS_ERROR, '$json'));
+  codigo(f, 'Resultado', [x(16), 300], [], `
+const r = $('Validar fuente').first().json;
+return [{ json: { ok: r.ok, errores: r.errores || [], avisos: r.avisos || [], resumen: r.resumen || '', ultima_sync: r.ok ? r.ahora : '' } }];`);
+
+  for (const t of ['Cada 10 minutos', 'Cambio en la carpeta', 'Desde la API']) f.conectar(t, 'Configuración');
+  f.cadena('Configuración', 'Leer configuración', 'Carpeta a sincronizar', '¿Hay carpeta?');
+  f.conectar('¿Hay carpeta?', 'Buscar hojas en la carpeta', 0);
+  f.conectar('¿Hay carpeta?', 'Validar fuente', 1);
+  f.cadena('Buscar hojas en la carpeta', 'Elegir hoja fuente', '¿Hay hoja fuente?');
+  f.conectar('¿Hay hoja fuente?', 'Leer PRODUCTOS', 0);
+  f.conectar('¿Hay hoja fuente?', 'Validar fuente', 1);
+  f.cadena('Leer PRODUCTOS', 'Leer CLIENTES', 'Leer VENTAS', 'Validar fuente', '¿Fuente válida?');
+  f.conectar('¿Fuente válida?', 'Estado de la sincronización', 0);
+  f.cadena('Estado de la sincronización', 'Guardar ultima_sync');
+  // Resultado va al final de la rama verdadera para que el subflujo devuelva su salida.
+  f.conectar('¿Fuente válida?', 'Resultado', 0);
+  f.conectar('¿Fuente válida?', 'Fila de error', 1);
+  f.cadena('Fila de error', 'Registrar error de sync', 'Resultado');
+  return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
+}
+
 // ---------- validación y escritura ----------
 
 function validar(flujo) {
@@ -717,6 +856,7 @@ function escribirFlujos(carpeta) {
     '5_prueba_local.json': flujoPrueba(),
     '6_confirmar_orden.json': flujoConfirmarOrden(),
     '7_api.json': flujoApi(),
+    '8_sincronizar_drive.json': flujoSync(),
   };
   for (const [archivo, flujo] of Object.entries(flujos)) {
     validar(flujo);
@@ -741,6 +881,9 @@ function main() {
     [T.cotizaciones]: [...ordenes.COLUMNAS_COTIZACION, 'notas_equipo'],
     [T.proveedores]: ordenes.COLUMNAS_PROVEEDOR,
     [T.config]: configBot.COLUMNAS_CONFIG,
+    [T.productos]: columnasSync.PRODUCTOS,
+    [T.clientesFuente]: columnasSync.CLIENTES,
+    [T.ventas]: columnasSync.VENTAS,
   };
   fs.writeFileSync(path.join(RAIZ, 'hoja', 'columnas.json'), JSON.stringify(columnas, null, 2) + '\n');
   // Filas con las que nacen algunas pestañas (valores por defecto que el dashboard después edita).
@@ -748,8 +891,12 @@ function main() {
     [T.config]: configBot.filasConfigIniciales(),
   };
   fs.writeFileSync(path.join(RAIZ, 'hoja', 'filas_iniciales.json'), JSON.stringify(iniciales, null, 2) + '\n');
-  console.log('hoja/columnas.json y hoja/filas_iniciales.json actualizados');
+  // Plantilla MERMIN_FUENTE que se entrega al negocio: cabeceras y filas de ejemplo.
+  const demo = require('../sim/fuente_demo');
+  const fuente = Object.fromEntries(Object.entries(columnasSync).map(([p, cols]) => [p, { columnas: cols, filas: demo[p].map(f => cols.map(c => f[c])) }]));
+  fs.writeFileSync(path.join(RAIZ, 'hoja', 'plantilla_fuente.json'), JSON.stringify(fuente, null, 2) + '\n');
+  console.log('hoja/columnas.json, hoja/filas_iniciales.json y hoja/plantilla_fuente.json actualizados');
 }
 
 if (require.main === module) main();
-module.exports = { flujoProcesar, flujoEntrada, flujoHumano, flujoErrores, flujoPrueba, flujoConfirmarOrden, flujoApi };
+module.exports = { flujoProcesar, flujoEntrada, flujoHumano, flujoErrores, flujoPrueba, flujoConfirmarOrden, flujoApi, flujoSync };

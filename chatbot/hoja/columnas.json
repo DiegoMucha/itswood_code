@@ -122,5 +122,33 @@
     "clave",
     "valor",
     "descripcion"
+  ],
+  "BOT_PRODUCTOS": [
+    "sku",
+    "nombre",
+    "categoria",
+    "precio",
+    "costo",
+    "stock",
+    "activo"
+  ],
+  "BOT_CLIENTES_FUENTE": [
+    "cliente_id",
+    "nombre",
+    "telefono",
+    "email",
+    "tipo",
+    "fecha_registro",
+    "acepta_marketing"
+  ],
+  "BOT_VENTAS": [
+    "fecha",
+    "pedido_id",
+    "cliente_id",
+    "sku",
+    "cantidad",
+    "total",
+    "canal",
+    "codigo"
   ]
 }

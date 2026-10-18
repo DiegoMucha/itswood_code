@@ -75,6 +75,39 @@ def main():
     destino = DIR / "pestanas_bot_itswood.xlsx"
     wb.save(destino)
     print(f"{destino.name}: {', '.join(wb.sheetnames)}; {len(filas) - 1} productos")
+    plantilla_fuente()
+
+
+def plantilla_fuente():
+    """hoja/plantilla_fuente_mermin.xlsx: la hoja que el negocio deja en su carpeta de Drive (renombrada a
+    MERMIN_FUENTE ...). Trae las tres pestañas con datos de ejemplo para reemplazar."""
+    fuente = json.loads((DIR / "plantilla_fuente.json").read_text(encoding="utf-8"))
+    notas = {
+        "costo": "Costo unitario. Si lo dejas vacío se usa margen_por_defecto de BOT_CONFIG.",
+        "tipo": "EMPRESA o PERSONA.",
+        "acepta_marketing": "SI para incluirlo en campañas y audiencias de Ads.",
+        "canal": "WEB, WHATSAPP o TIENDA.",
+        "codigo": "Código de descuento usado (p. ej. WEB10): mide las ventas web que vinieron del bot.",
+        "fecha": "dd/mm/aaaa o aaaa-mm-dd.",
+    }
+    wb = Workbook()
+    wb.remove(wb.active)
+    for pestana, datos in fuente.items():
+        ws = wb.create_sheet(pestana)
+        NOTAS.update(notas)
+        cabecera(ws, datos["columnas"])
+        for fila in datos["filas"]:
+            ws.append([valor_celda(v) for v in fila])
+    destino = DIR / "plantilla_fuente_mermin.xlsx"
+    wb.save(destino)
+    print(f"{destino.name}: {', '.join(wb.sheetnames)}")
+
+
+def valor_celda(v):
+    """Números como números; el resto (ids, teléfonos, fechas) como texto."""
+    if isinstance(v, str) and v.replace(".", "", 1).isdigit() and (v == "0" or not v.startswith("0")) and len(v) < 8:
+        return float(v) if "." in v else int(v)
+    return v if v != "" else None
 
 
 if __name__ == "__main__":

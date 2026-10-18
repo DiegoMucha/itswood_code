@@ -55,6 +55,26 @@ test('nodos del subflujo: duplicado, motor, comparar modo y preparar envíos', (
   assert.equal(envios[0].phone_number_id, 'PHONE_PRUEBA');
 });
 
+test('flujo Sincronizar Drive: nodos Elegir hoja fuente y Validar fuente', () => {
+  const { flujoSync } = require('../n8n/build');
+  const demo = require('../sim/fuente_demo');
+  const flujo = flujoSync();
+  const [elegida] = ejecutarCodigo(flujo, 'Elegir hoja fuente', {}, demo.ARCHIVOS_CARPETA);
+  assert.equal(elegida.hoja.id, 'SHEET_FUENTE');
+  const datos = {
+    'Carpeta a sincronizar': [{ ok: true, folder_id: 'CARPETA' }], 'Elegir hoja fuente': [elegida],
+    'Leer PRODUCTOS': demo.PRODUCTOS, 'Leer CLIENTES': demo.CLIENTES, 'Leer VENTAS': demo.VENTAS,
+  };
+  const [r] = ejecutarCodigo(flujo, 'Validar fuente', datos);
+  assert.equal(r.ok, true);
+  assert.equal(r.productos.length, 9);
+  // Sin carpeta: las lecturas no corrieron y el error queda listo para BOT_ERRORES.
+  const [sin] = ejecutarCodigo(flujo, 'Validar fuente', { 'Carpeta a sincronizar': [{ ok: false, error: 'Falta conectar la carpeta' }] });
+  assert.equal(sin.ok, false);
+  const trigger = flujo.nodes.find(n => n.name === 'Cambio en la carpeta');
+  assert.equal(trigger.disabled, true, 'sin driveFolderId el trigger de Drive queda desactivado');
+});
+
 test('nodo Decidir acción del formulario', () => {
   const flujo = flujoHumano();
   const datos = { 'Formulario de atención': [{ 'WhatsApp del cliente': '51987000001', 'Acción': 'Tomar caso', 'Mensaje al cliente': '', 'Responsable': 'Carla' }] };

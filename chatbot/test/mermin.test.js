@@ -7,9 +7,11 @@ const assert = require('node:assert/strict');
 const path = require('path');
 
 const { HojaMemoria, leerCsv } = require('../sim/hoja_memoria');
-const { recibirWebhook } = require('../sim/pipeline');
+const { recibirWebhook, sincronizarDrive } = require('../sim/pipeline');
 const ev = require('../sim/eventos');
+const demo = require('../sim/fuente_demo');
 const { leerConfig, render, validarCambiosConfig, mensajeBienvenida } = require('../src/config');
+const { extraerFolderId, elegirHojaFuente, fechaFuente, conectarDrive } = require('../src/sync');
 
 const CATALOGO = leerCsv(path.join(__dirname, '..', 'hoja', 'catalogo_bot.csv'));
 const ANA = '51987000001';
@@ -91,4 +93,74 @@ test('bienvenida: el nombre del bot y el tono se editan desde BOT_CONFIG', async
   assert.match(r, /¿Prefiere que le ayude por aquí?/);
 });
 
-module.exports = { entorno, conversar, ANA, LUIS, CONFIG_DEMO };
+// ---------- 3. Sincronización de la carpeta de Drive ----------
+
+// Drive simulado: la carpeta tiene la hoja fuente con las pestañas de fuente_demo (editables en la prueba).
+function conDrive(e, fuente = demo.copia(), archivos = demo.ARCHIVOS_CARPETA) {
+  e.drive = {
+    listar: folderId => (folderId === 'CARPETA_DEMO' ? archivos : []),
+    leer: (sheetId, pestana) => (sheetId === 'SHEET_FUENTE' ? fuente[pestana] || [] : []),
+  };
+  e.hoja.tablas.BOT_CONFIG.push({ clave: 'drive_folder_id', valor: 'CARPETA_DEMO' });
+  return fuente;
+}
+
+test('drive: URL de carpeta, elección de la hoja MERMIN_FUENTE y formatos de la hoja', () => {
+  assert.equal(extraerFolderId('https://drive.google.com/drive/u/0/folders/1AbC_dEfGhIjKlMn?usp=sharing'), '1AbC_dEfGhIjKlMn');
+  assert.equal(extraerFolderId('https://drive.google.com/open?id=1AbC_dEfGhIjKlMn'), '1AbC_dEfGhIjKlMn');
+  assert.equal(extraerFolderId('no es una url'), '');
+  assert.equal(elegirHojaFuente(demo.ARCHIVOS_CARPETA).id, 'SHEET_FUENTE');
+  assert.equal(elegirHojaFuente([{ id: 'X', name: 'Ventas', mimeType: 'application/vnd.google-apps.spreadsheet' }]).id, 'X', 'sin MERMIN_FUENTE usa la primera');
+  assert.equal(elegirHojaFuente([{ id: 'P', name: 'foto.png', mimeType: 'image/png' }]), null);
+  assert.equal(fechaFuente('17/10/2026'), '2026-10-17');
+  assert.equal(fechaFuente('46312'), '2026-10-17', 'número de serie de Sheets');
+  assert.equal(fechaFuente('31/02/2026'), '');
+});
+
+test('drive: copia la fuente a las pestañas BOT_ y guarda la hoja y ultima_sync en BOT_CONFIG', async () => {
+  const e = entorno();
+  conDrive(e);
+  const r = await sincronizarDrive(e);
+  assert.equal(r.ok, true, r.errores && r.errores.join(' '));
+  assert.equal(e.hoja.tablas.BOT_PRODUCTOS.length, 9);
+  assert.equal(e.hoja.tablas.BOT_CLIENTES_FUENTE.length, 7);
+  assert.equal(e.hoja.tablas.BOT_VENTAS.length, 12);
+  const ana = e.hoja.tablas.BOT_CLIENTES_FUENTE.find(c => c.cliente_id === 'C002');
+  assert.equal(ana.telefono, '51987000001');
+  assert.equal(e.hoja.tablas.BOT_CLIENTES_FUENTE.find(c => c.cliente_id === 'C007').tipo, 'PERSONA');
+  const p008 = e.hoja.tablas.BOT_VENTAS.find(v => v.pedido_id === 'P008');
+  assert.equal(p008.total, 85, 'sin total se calcula con el precio');
+  assert.equal(p008.codigo, 'WEB10');
+  assert.equal(e.hoja.tablas.BOT_VENTAS[0].fecha, '2026-04-10');
+  const config = leerConfig(e.hoja.tablas.BOT_CONFIG);
+  assert.equal(config.sheet_fuente_id, 'SHEET_FUENTE');
+  assert.match(config.ultima_sync, /^2026-10-17T/);
+});
+
+test('drive: una columna faltante se registra en BOT_ERRORES y conserva la última copia válida', async () => {
+  const e = entorno();
+  const fuente = conDrive(e);
+  await sincronizarDrive(e);
+  for (const f of fuente.VENTAS) delete f.total;
+  fuente.PRODUCTOS.push({ sku: 'NUEVO', nombre: 'Nuevo', categoria: '', precio: '10', costo: '', stock: '', activo: '' });
+  const r = await sincronizarDrive(e);
+  assert.equal(r.ok, false);
+  assert.match(r.errores[0], /VENTAS le faltan columnas: total/);
+  assert.match(e.hoja.tablas.BOT_ERRORES.at(-1).mensaje, /total/);
+  assert.equal(e.hoja.tablas.BOT_PRODUCTOS.length, 9, 'la copia anterior no se toca');
+
+  const sinCarpeta = entorno();
+  const r2 = await sincronizarDrive(sinCarpeta);
+  assert.match(r2.errores[0], /Falta conectar la carpeta/);
+});
+
+test('drive: conectar la carpeta valida la URL y pide compartirla con la cuenta de servicio', () => {
+  assert.equal(conectarDrive({ url: 'hola' }).status, 400);
+  const sinAcceso = conectarDrive({ url: 'https://drive.google.com/drive/folders/1AbC_dEfGhIjKlMn', archivos: [], correoServicio: 'bot@proyecto.iam.gserviceaccount.com' });
+  assert.equal(sinAcceso.status, 403);
+  assert.match(sinAcceso.error, /bot@proyecto\.iam\.gserviceaccount\.com/);
+  const ok = conectarDrive({ url: 'https://drive.google.com/drive/folders/1AbC_dEfGhIjKlMn', archivos: demo.ARCHIVOS_CARPETA });
+  assert.deepEqual(ok.config.map(c => [c.clave, c.valor]), [['drive_folder_id', '1AbC_dEfGhIjKlMn'], ['sheet_fuente_id', 'SHEET_FUENTE']]);
+});
+
+module.exports = { entorno, conversar, conDrive, ANA, LUIS, CONFIG_DEMO };
