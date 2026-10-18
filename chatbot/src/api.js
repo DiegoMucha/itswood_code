@@ -20,6 +20,8 @@ const RUTAS = {
   'segmento-clientes': { metodo: 'GET', url: 'segmentos/{segmento}/clientes' },
   recomendacion: { metodo: 'GET', url: 'recomendaciones/{cliente_id}' },
   audiencia: { metodo: 'GET', url: 'audiencias/{segmento}.csv' },
+  'campana-preview': { metodo: 'POST', url: 'campanas/{segmento}/preview' },
+  'campana-enviar': { metodo: 'POST', url: 'campanas/{segmento}/enviar' },
 };
 const LIMITE_MAXIMO = 500;
 const INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];
@@ -36,6 +38,7 @@ function resolverRuta(ruta, id, accion) {
   if (base === 'segmentos' && c.toLowerCase() === 'clientes') return { nombre: 'segmento-clientes', param: b.toUpperCase() };
   if (base === 'recomendaciones' && !c) return { nombre: 'recomendacion', param: b };
   if (base === 'audiencias' && !c) return { nombre: 'audiencia', param: b.replace(/\.csv$/i, '').toUpperCase() };
+  if (base === 'campanas' && ['preview', 'enviar'].includes(c.toLowerCase())) return { nombre: `campana-${c.toLowerCase()}`, param: b.toUpperCase() };
   return { nombre: [a, b, c].filter(Boolean).join('/').toLowerCase(), param: '' };
 }
 
@@ -102,6 +105,12 @@ function validarPeticion({ metodo, ruta, id, accion, query, body, ahora }) {
       return { ok: true, ruta: r, segmento: param, limite };
     case 'recomendacion':
       return { ok: true, ruta: r, cliente_id: param };
+    case 'campana-preview':
+    case 'campana-enviar':
+      if (!SEGMENTOS_API.slice(0, 5).includes(param)) return fallo(400, `segmento debe ser ${SEGMENTOS_API.slice(0, 5).join(', ')}.`);
+      // Enviar escribe a clientes reales: se pide una confirmación explícita en el cuerpo.
+      if (r === 'campana-enviar' && b.confirmar !== true) return fallo(400, 'Para enviar, manda { "confirmar": true }. Revisa antes la vista previa.');
+      return { ok: true, ruta: r, segmento: param };
     case 'cotizaciones':
       return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };
     case 'proveedores':

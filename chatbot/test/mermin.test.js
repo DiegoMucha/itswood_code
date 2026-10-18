@@ -315,6 +315,40 @@ test('reglas por segmento: valores por defecto, filas de BOT_FIDELIZACION y vali
   assert.match(validarReglas({ reglas: [{ segmento: 'VIP', frecuencia_dias: '0' }] }).error, /frecuencia_dias/);
 });
 
+// ---------- 5. Campañas de fidelización (flujo [9]) ----------
+
+test('campañas: la vista previa no envía; enviar exige confirmar y respeta frecuencia_dias', async () => {
+  const { llamarApi, campanas } = require('../sim/pipeline');
+  const e = entorno();
+  conDrive(e);
+  await sincronizarDrive(e);
+  e.correos = [];
+  e.enviarCorreo = async correo => { e.correos.push(correo); };
+
+  const preview = await llamarApi({ metodo: 'POST', ruta: 'campanas/NUEVO/preview', body: {} }, e);
+  assert.equal(preview.cuerpo.total, 1);
+  assert.equal(preview.cuerpo.destinatarios[0].nombre, 'Carla Ruiz');
+  assert.match(preview.cuerpo.destinatarios[0].asunto, /^ITS WOOD: Cupón SEGUNDA10/);
+  assert.equal(e.correos.length, 0);
+
+  assert.equal((await llamarApi({ metodo: 'POST', ruta: 'campanas/NUEVO/enviar', body: {} }, e)).status, 400, 'sin confirmar no envía');
+  const envio = await llamarApi({ metodo: 'POST', ruta: 'campanas/NUEVO/enviar', body: { confirmar: true } }, e);
+  assert.equal(envio.cuerpo.destinatarios, 1);
+  assert.equal(e.correos[0].to, 'carla@example.com');
+  assert.equal(e.hoja.tablas.BOT_CAMPANAS[0].estado, 'ENVIADO');
+
+  // Ya contactada hoy: con frecuencia de 20 días no le toca de nuevo.
+  const otra = await llamarApi({ metodo: 'POST', ruta: 'campanas/NUEVO/preview', body: {} }, e);
+  assert.equal(otra.cuerpo.total, 0);
+  assert.equal(otra.cuerpo.omitidos.contactado_recientemente, 1);
+
+  // Disparo diario: vista previa de todos los segmentos como PREVISTA (Elena no aceptó marketing: no aparece).
+  const diario = await campanas({}, e);
+  assert.equal(diario.resultados.length, 5);
+  assert.ok(e.hoja.tablas.BOT_CAMPANAS.some(c => c.estado === 'PREVISTA' && c.segmento === 'DORMIDO'));
+  assert.equal(e.correos.length, 1, 'la vista previa diaria no envía nada');
+});
+
 // ---------- 7. Las 5 métricas ----------
 
 const PEDIDO_EMPRESA = ['Hola', '1', 'Acme SAC', 'Luis', 'Fin de año', 'roma', '1', '20', 'no', 'mañana', 'Av. Javier Prado 100, San Isidro', 'mañanas', '1'];

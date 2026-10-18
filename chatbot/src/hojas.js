@@ -18,6 +18,8 @@ const PESTANAS = {
   ventas: 'BOT_VENTAS',
   // Reglas de canal, mensaje y oferta por segmento de fidelización (las edita el dashboard).
   fidelizacion: 'BOT_FIDELIZACION',
+  // Registro de campañas: vista previa diaria (PREVISTA) y envíos (ENVIADO / ERROR_ENVIO).
+  campanas: 'BOT_CAMPANAS',
   proveedores: 'PROVEEDORES',
   pautas: 'PAUTAS ',
   inventario: 'INVENTARIO',

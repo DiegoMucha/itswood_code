@@ -254,6 +254,64 @@ function recomendarPara(cliente, { productos, ventas, reglas, config, ahora, lim
   };
 }
 
+// ---------- campañas (flujo [9]) ----------
+// A quién le toca según frecuencia_dias del segmento. En la demo se envía por email: fuera de la ventana de 24 h,
+// WhatsApp exige una plantilla aprobada por Meta.
+
+const COLUMNAS_CAMPANA = ['campana_id', 'fecha', 'segmento', 'cliente_id', 'nombre', 'canal', 'destino', 'asunto', 'mensaje', 'estado', 'detalle'];
+
+// Último envío por cliente y segmento (BOT_CAMPANAS con estado ENVIADO).
+function ultimosEnvios(campanas, segmento) {
+  const ultimo = {};
+  for (const c of campanas || []) {
+    if (fidTexto(c.segmento).toUpperCase() !== segmento || fidTexto(c.estado).toUpperCase() !== 'ENVIADO') continue;
+    const id = fidTexto(c.cliente_id);
+    const dia = fidDia(c.fecha);
+    if (id && dia && (!ultimo[id] || dia > ultimo[id])) ultimo[id] = dia;
+  }
+  return ultimo;
+}
+
+function aQuienLeToca({ segmento, clientes, ventas, productos, fidelizacion, campanas, config, ahora }) {
+  const seg = fidTexto(segmento).toUpperCase();
+  if (!SEGMENTOS_FIDELIZACION.includes(seg)) return { ok: false, status: 400, error: `segmento debe ser ${SEGMENTOS_FIDELIZACION.join(', ')}.` };
+  const ahoraIso = ahora || new Date().toISOString();
+  const hoy = fidDia(ahoraIso);
+  const reglas = leerReglas(fidelizacion);
+  const regla = reglas[seg];
+  const omitidos = { sin_permiso: 0, contactado_recientemente: 0, sin_email: 0 };
+  const base = { ok: true, status: 200, segmento: seg, regla, fecha: hoy, omitidos };
+  if (regla.activo !== 'SI') return { ...base, destinatarios: [], aviso: `La regla de ${seg} está inactiva en BOT_FIDELIZACION.` };
+  const ultimo = ultimosEnvios(campanas, seg);
+  const frecuencia = Number(regla.frecuencia_dias);
+  const negocio = fidTexto(config && config.nombre_negocio) || 'ITS WOOD';
+  const destinatarios = [];
+  for (const c of segmentar({ clientes, ventas, ahora: ahoraIso }).filter(x => x.segmento === seg)) {
+    if (c.acepta_marketing !== 'SI') { omitidos.sin_permiso += 1; continue; }
+    if (ultimo[c.cliente_id] && diasEntre(ultimo[c.cliente_id], hoy) < frecuencia) { omitidos.contactado_recientemente += 1; continue; }
+    if (!c.email) { omitidos.sin_email += 1; continue; }
+    const reco = recomendarPara(c, { productos, ventas, reglas, config, ahora: ahoraIso });
+    destinatarios.push({
+      campana_id: `CAMP-${seg}-${hoy.replace(/-/g, '')}-${c.cliente_id}`,
+      cliente_id: c.cliente_id, nombre: c.nombre, email: c.email, telefono: c.telefono,
+      producto: reco.productos[0] ? reco.productos[0].nombre : '',
+      asunto: `${negocio}: ${regla.oferta}`.slice(0, 150),
+      mensaje: reco.mensaje || fidRender(regla.mensaje, { nombre: primerNombre(c.nombre), producto: 'nuestra nueva colección', oferta: regla.oferta, negocio, url: fidTexto(config && config.url_web) }),
+    });
+  }
+  return { ...base, destinatarios };
+}
+
+// Filas de BOT_CAMPANAS. estado: PREVISTA (vista previa diaria), ENVIADO o ERROR_ENVIO (con resultados por id).
+function filasCampana(resultado, { ahora, estado, errores }) {
+  const fallidos = errores || {};
+  return (resultado.destinatarios || []).map(d => ({
+    campana_id: d.campana_id, fecha: ahora || new Date().toISOString(), segmento: resultado.segmento,
+    cliente_id: d.cliente_id, nombre: d.nombre, canal: 'EMAIL', destino: d.email, asunto: d.asunto, mensaje: d.mensaje,
+    estado: fallidos[d.campana_id] ? 'ERROR_ENVIO' : estado, detalle: fallidos[d.campana_id] ? String(fallidos[d.campana_id]).slice(0, 500) : '',
+  }));
+}
+
 // ---------- audiencias para Ads ----------
 
 function campoCsv(v) { const s = fidTexto(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
@@ -269,6 +327,7 @@ function audiencia(segmentados, segmento) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     segmentar, conteoSegmentos, leerReglas, validarReglas, recomendarPara, audiencia, leerProductosFuente,
-    SEGMENTOS_FIDELIZACION, SEGMENTOS_OTROS, REGLAS_POR_DEFECTO, COLUMNAS_FIDELIZACION, COLUMNAS_SEGMENTO,
+    aQuienLeToca, filasCampana,
+    SEGMENTOS_FIDELIZACION, SEGMENTOS_OTROS, REGLAS_POR_DEFECTO, COLUMNAS_FIDELIZACION, COLUMNAS_SEGMENTO, COLUMNAS_CAMPANA,
   };
 }

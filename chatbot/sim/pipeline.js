@@ -13,6 +13,7 @@ const api = require('../src/api');
 const { leerConfig } = require('../src/config');
 const { elegirHojaFuente, prepararSync, filaErrorSync } = require('../src/sync');
 const { responderPanel } = require('../src/panel');
+const { aQuienLeToca, filasCampana, SEGMENTOS_FIDELIZACION } = require('../src/fidelizacion');
 
 function elegir(obj, columnas) { return Object.fromEntries(columnas.map(c => [c, obj[c] === undefined || obj[c] === null ? '' : obj[c]])); }
 
@@ -124,7 +125,32 @@ function datosPanel(hoja) {
     config: hoja.leer(T.config), eventos: hoja.leer(T.eventos), solicitudes: hoja.leer(T.solicitudes),
     conversaciones: hoja.leer(T.conversaciones), ventas: hoja.leer(T.ventas), clientes: hoja.leer(T.clientes),
     clientesFuente: hoja.leer(T.clientesFuente), productos: hoja.leer(T.productos), fidelizacion: hoja.leer(T.fidelizacion),
+    campanas: hoja.leer(T.campanas),
   };
+}
+
+// Flujo "Mermín - Campañas de fidelización". Sin segmento (disparo diario) arma la vista previa de todos los
+// segmentos y la deja como PREVISTA; con enviar, manda los correos (entorno.enviarCorreo) y registra cada envío.
+async function campanas({ segmento, enviar }, entorno) {
+  const { hoja } = entorno;
+  const ahora = reloj(entorno);
+  const d = datosPanel(hoja);
+  const config = leerConfig(d.config);
+  const segmentos = segmento ? [segmento] : SEGMENTOS_FIDELIZACION;
+  const resultados = [];
+  for (const seg of segmentos) {
+    const r = aQuienLeToca({ segmento: seg, clientes: d.clientesFuente, ventas: d.ventas, productos: d.productos, fidelizacion: d.fidelizacion, campanas: d.campanas, config, ahora });
+    if (!r.ok) return r;
+    const errores = {};
+    if (enviar) {
+      for (const dest of r.destinatarios) {
+        try { await entorno.enviarCorreo({ to: dest.email, asunto: dest.asunto, texto: dest.mensaje }); } catch (e) { errores[dest.campana_id] = e.message; }
+      }
+    }
+    for (const fila of filasCampana(r, { ahora, estado: enviar ? 'ENVIADO' : 'PREVISTA', errores })) hoja.guardar(T.campanas, 'campana_id', fila);
+    resultados.push({ segmento: seg, destinatarios: r.destinatarios.length, errores: Object.keys(errores).length, omitidos: r.omitidos });
+  }
+  return { ok: true, status: 200, enviar: !!enviar, resultados };
 }
 function reloj(entorno) { return (typeof entorno.ahora === 'function' ? entorno.ahora() : entorno.ahora) || new Date().toISOString(); }
 
@@ -145,8 +171,12 @@ async function llamarApi({ metodo, ruta, query, body }, entorno) {
     case 'conversacion': return api.respuestaConversacion(hoja.leer(T.conversaciones, 'wa_id', v.filtros.wa_id), v.filtros.wa_id);
     case 'solicitudes': return api.respuestaLista(v.ruta, hoja.leer(T.solicitudes), v.filtros, v.limite);
     case 'leads': return api.respuestaLeads(hoja.leer(T.solicitudes), v);
-    case 'metricas': case 'segmentos': case 'segmento-clientes': case 'recomendacion': case 'audiencia':
+    case 'metricas': case 'segmentos': case 'segmento-clientes': case 'recomendacion': case 'audiencia': case 'campana-preview':
       return responderPanel(v, datosPanel(hoja), reloj(entorno));
+    case 'campana-enviar': {
+      const r = await campanas({ segmento: v.segmento, enviar: true }, entorno);
+      return { status: r.status, cuerpo: r.ok ? { ok: true, ruta: v.ruta, ...r.resultados[0] } : { ok: false, error: r.error } };
+    }
     case 'proveedores': return api.respuestaLista(v.ruta, hoja.leer(T.proveedores), v.filtros, v.limite);
     case 'cotizaciones': return api.respuestaLista(v.ruta, hoja.leer(T.cotizaciones), v.filtros, v.limite);
     case 'confirmar-orden': {
@@ -217,4 +247,4 @@ async function accionHumana(formulario, entorno) {
   }
 }
 
-module.exports = { procesarMensaje, recibirWebhook, accionHumana, confirmarOrden, llamarApi, sincronizarDrive };
+module.exports = { procesarMensaje, recibirWebhook, accionHumana, confirmarOrden, llamarApi, sincronizarDrive, campanas };

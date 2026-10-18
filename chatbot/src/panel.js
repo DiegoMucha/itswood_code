@@ -5,7 +5,7 @@
 // En n8n se concatenan antes config.js, metricas.js y fidelizacion.js; en Node se cargan con require.
 
 const PANEL_DEPS = typeof calcularMetricas === 'function'
-  ? { leerConfig, calcularMetricas, segmentar, conteoSegmentos, leerReglas, recomendarPara, audiencia }
+  ? { leerConfig, calcularMetricas, segmentar, conteoSegmentos, leerReglas, recomendarPara, audiencia, aQuienLeToca }
   : { ...require('./config'), ...require('./metricas'), ...require('./fidelizacion') };
 
 // Lo que el dashboard muestra de cada cliente segmentado (sin las listas internas).
@@ -53,6 +53,14 @@ function responderPanel(peticion, datos, ahora) {
       const cliente = segmentados().find(c => c.cliente_id.toUpperCase() === String(peticion.cliente_id).toUpperCase());
       if (!cliente) return { status: 404, cuerpo: { ok: false, error: `No hay un cliente ${peticion.cliente_id} en BOT_CLIENTES_FUENTE.` } };
       return { status: 200, cuerpo: { ok: true, ruta: 'recomendacion', cliente: clientePanel(cliente), ...recomendar(cliente, reglas()) } };
+    }
+    case 'campana-preview': {
+      const r = PANEL_DEPS.aQuienLeToca({
+        segmento: peticion.segmento, clientes: d.clientesFuente, ventas: d.ventas, productos: d.productos,
+        fidelizacion: d.fidelizacion, campanas: d.campanas, config, ahora: ahoraIso,
+      });
+      if (!r.ok) return { status: r.status, cuerpo: { ok: false, error: r.error } };
+      return { status: 200, cuerpo: { ok: true, ruta: 'campana-preview', ...r, total: r.destinatarios.length } };
     }
     case 'audiencia': {
       const a = PANEL_DEPS.audiencia(segmentados(), peticion.segmento);

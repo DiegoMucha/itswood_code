@@ -86,7 +86,7 @@ test('flujo API: el nodo Responder panel calcula las métricas con las pestañas
     'Panel: leer BOT_CONFIG': vacio, 'Panel: leer BOT_EVENTOS': vacio, 'Panel: leer BOT_SOLICITUDES': vacio,
     'Panel: leer BOT_CONVERSACIONES': vacio, 'Panel: leer BOT_VENTAS': [{ fecha: '2026-06-01', pedido_id: 'P1', total: 100 }, { fecha: '2026-06-02', pedido_id: 'P2', total: 50 }],
     'Panel: leer BOT_CLIENTES': vacio, 'Panel: leer BOT_CLIENTES_FUENTE': demo.CLIENTES, 'Panel: leer BOT_PRODUCTOS': vacio,
-    'Panel: leer BOT_FIDELIZACION': vacio,
+    'Panel: leer BOT_FIDELIZACION': vacio, 'Panel: leer BOT_CAMPANAS': vacio,
   };
   const [seg] = ejecutarCodigo(api, 'Petición GET', {}, [{ params: { ruta: 'segmentos', id: 'vip', accion: 'clientes' }, query: {} }]);
   assert.deepEqual([seg.ruta, seg.segmento], ['segmento-clientes', 'VIP']);
@@ -97,6 +97,25 @@ test('flujo API: el nodo Responder panel calcula las métricas con las pestañas
   assert.equal(r.status, 200);
   assert.equal(r.cuerpo.ticket_promedio.valor, 75);
   assert.equal(r.cuerpo.clientes_registrados.total, 7);
+});
+
+test('flujo Campañas: a quién le toca y filas con el error de cada correo', () => {
+  const { flujoCampanas } = require('../n8n/build');
+  const demo = require('../sim/fuente_demo');
+  const flujo = flujoCampanas();
+  const datos = {
+    'Desde la API': [{ segmento: 'DORMIDO', enviar: true }],
+    'Leer BOT_CONFIG': [{}], 'Leer BOT_CLIENTES_FUENTE': demo.CLIENTES, 'Leer BOT_VENTAS': demo.VENTAS,
+    'Leer BOT_PRODUCTOS': demo.PRODUCTOS, 'Leer BOT_FIDELIZACION': [{}], 'Leer BOT_CAMPANAS': [{}],
+  };
+  const [r] = ejecutarCodigo(flujo, 'A quién le toca', datos);
+  assert.equal(r.enviar, true);
+  assert.equal(r.resultados[0].destinatarios[0].email, 'diego@example.com');
+  datos['A quién le toca'] = [r];
+  datos.Correos = ejecutarCodigo(flujo, 'Correos', datos);
+  const filas = ejecutarCodigo(flujo, 'Filas enviadas', datos, [{ error: { message: 'SMTP caído' } }]);
+  assert.equal(filas[0].estado, 'ERROR_ENVIO');
+  assert.match(filas[0].detalle, /SMTP caído/);
 });
 
 test('nodo Decidir acción del formulario', () => {

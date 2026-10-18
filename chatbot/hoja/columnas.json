@@ -166,5 +166,18 @@
     "oferta",
     "frecuencia_dias",
     "activo"
+  ],
+  "BOT_CAMPANAS": [
+    "campana_id",
+    "fecha",
+    "segmento",
+    "cliente_id",
+    "nombre",
+    "canal",
+    "destino",
+    "asunto",
+    "mensaje",
+    "estado",
+    "detalle"
   ]
 }

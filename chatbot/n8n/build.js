@@ -32,6 +32,8 @@ function cargarConfig(conLocal) {
     // Carpeta que vigila el Google Drive Trigger (el resto del flujo usa BOT_CONFIG.drive_folder_id) y correo de la
     // cuenta de servicio, que la API muestra para que el negocio comparta la carpeta.
     driveFolderId: '', correoServicio: '',
+    // Campañas [9]: remitente de los correos.
+    idCampanas: '', correoRemitente: '',
     // Credenciales ya creadas en n8n (solo id y nombre; los secretos quedan en n8n).
     credGoogleId: '', credGoogleNombre: '', credPruebaId: '', credPruebaNombre: '', credApiId: '', credApiNombre: '',
   };
@@ -555,10 +557,10 @@ return [{ json: {
 const PANEL_TABLAS = [
   ['config', T.config], ['eventos', T.eventos], ['solicitudes', T.solicitudes], ['conversaciones', T.conversaciones],
   ['ventas', T.ventas], ['clientes', T.clientes], ['clientesFuente', T.clientesFuente], ['productos', T.productos],
-  ['fidelizacion', T.fidelizacion],
+  ['fidelizacion', T.fidelizacion], ['campanas', T.campanas],
 ];
 const ARCHIVOS_PANEL = ['config.js', 'metricas.js', 'fidelizacion.js', 'panel.js'];
-const RUTAS_PANEL = ['metricas', 'segmentos', 'segmento-clientes', 'recomendacion', 'audiencia'];
+const RUTAS_PANEL = ['metricas', 'segmentos', 'segmento-clientes', 'recomendacion', 'audiencia', 'campana-preview'];
 
 function flujoApi() {
   const f = crearFlujo('ITS WOOD - API', CONFIG.idApi);
@@ -590,7 +592,7 @@ if (v.ruta === 'salud') return [{ json: { ruta: 'salud', status: 200, cuerpo: { 
 return [{ json: v }];`;
   METODOS.forEach((m, i) => codigo(f, `Petición ${m}`, [220, 200 + i * 220], ['api.js'], peticion(m)));
   configuracion(f, [440, 300], ['sheetId']);
-  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads', ...RUTAS_PANEL];
+  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads', ...RUTAS_PANEL, 'campana-enviar'];
   switchRutas(f, 'Enrutar', [660, 300], '$json.ruta', rutas);
 
   // mensaje: el bot responde por HTTP (origen "api"), sin enviar nada por WhatsApp.
@@ -630,6 +632,14 @@ const datos = ${JSON.stringify(Object.fromEntries(PANEL_TABLAS.map(([clave, tabl
 for (const clave of Object.keys(datos)) datos[clave] = $(datos[clave]).all().map(i => i.json);
 return [{ json: responderPanel(peticion, datos, new Date().toISOString()) }];`);
 
+  // campana-enviar: el subflujo [9] envía los correos y registra cada envío.
+  codigo(f, 'Pedido de campaña', [880, 1240], [], "return [{ json: { segmento: $input.first().json.segmento, enviar: true } }];");
+  ejecutarSubflujo(f, 'Campañas', [1100, 1240], CONFIG.idCampanas, 'Subflujo Mermín - Campañas de fidelización.');
+  codigo(f, 'Respuesta de campaña', [1320, 1240], [], `
+const r = $input.first().json || {};
+if (r.ok === undefined) return [{ json: { status: 500, cuerpo: { ok: false, error: 'El subflujo Campañas no devolvió resultado.' } } }];
+return [{ json: { status: r.status || 200, cuerpo: r.ok ? { ok: true, ruta: 'campana-enviar', ...(r.resultados || [])[0] } : { ok: false, error: r.error } } }];`);
+
   si(f, '¿Respuesta CSV?', [1100 + lecturasPanel.length * 180, 1000], 'typeof $json.csv === \'string\'');
   f.nodo('Responder CSV', 'n8n-nodes-base.respondToWebhook', 1.1, [1320 + lecturasPanel.length * 180, 900], {
     respondWith: 'text',
@@ -666,6 +676,8 @@ return [{ json: responderPanel(peticion, datos, new Date().toISOString()) }];`);
   f.cadena(...lecturasPanel, 'Responder panel', '¿Respuesta CSV?');
   f.conectar('¿Respuesta CSV?', 'Responder CSV', 0);
   f.conectar('¿Respuesta CSV?', 'Responder', 1);
+  f.conectar('Enrutar', 'Pedido de campaña', salida('campana-enviar'));
+  f.cadena('Pedido de campaña', 'Campañas', 'Respuesta de campaña', 'Responder');
   return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
 }
 
@@ -872,6 +884,85 @@ return [{ json: { ok: r.ok, errores: r.errores || [], avisos: r.avisos || [], re
   return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
 }
 
+// ---------- 9. Campañas de fidelización ----------
+// Cada día arma "a quién le toca" por segmento (frecuencia_dias de BOT_FIDELIZACION) y lo deja en BOT_CAMPANAS como
+// PREVISTA. Solo envía cuando la API lo pide (POST /campanas/{segmento}/enviar con confirmar: true), por email.
+// Entrada desde la API: { segmento, enviar }. Salida: { ok, status, error, enviar, resultados }.
+
+function flujoCampanas() {
+  const f = crearFlujo('Mermín - Campañas de fidelización', CONFIG.idCampanas);
+  const x = i => i * 220;
+  f.nodo('Cada día 09:00', 'n8n-nodes-base.scheduleTrigger', 1.2, [x(0), 200], { rule: { interval: [{ field: 'cronExpression', expression: '0 9 * * *' }] } });
+  f.nodo('Desde la API', 'n8n-nodes-base.executeWorkflowTrigger', 1.1, [x(0), 420], { inputSource: 'passthrough' });
+  configuracion(f, [x(1), 300], ['sheetId', 'correoRemitente']);
+  const lecturas = [['config', T.config], ['clientes', T.clientesFuente], ['ventas', T.ventas], ['productos', T.productos], ['fidelizacion', T.fidelizacion], ['campanas', T.campanas]];
+  lecturas.forEach(([, tabla], i) => sheetsLeer(f, `Leer ${tabla}`, [x(2 + i), 300], tabla));
+  codigo(f, 'A quién le toca', [x(8), 300], ['config.js', 'fidelizacion.js'], `
+${FILAS_DE}
+const entrada = filasDe('Desde la API')[0] || {};
+const ahora = new Date().toISOString();
+const leer = ${JSON.stringify(Object.fromEntries(lecturas.map(([k, tabla]) => [k, `Leer ${tabla}`])))};
+const d = Object.fromEntries(Object.entries(leer).map(([k, nodo]) => [k, filasDe(nodo)]));
+const config = leerConfig(d.config);
+const segmentos = entrada.segmento ? [entrada.segmento] : SEGMENTOS_FIDELIZACION;
+const resultados = segmentos.map(segmento => aQuienLeToca({ segmento, clientes: d.clientes, ventas: d.ventas, productos: d.productos, fidelizacion: d.fidelizacion, campanas: d.campanas, config, ahora }));
+const error = resultados.find(r => !r.ok);
+return [{ json: { ok: !error, status: error ? error.status : 200, error: error ? error.error : '', enviar: entrada.enviar === true, ahora, resultados } }];`);
+  si(f, '¿Enviar?', [x(9), 300], '$json.ok && $json.enviar');
+  si(f, '¿Hay destinatarios?', [x(10), 200], '$json.resultados.some(r => (r.destinatarios || []).length > 0)');
+  codigo(f, 'Correos', [x(11), 100], [], `
+const r = $('A quién le toca').first().json;
+return r.resultados.flatMap(x => x.destinatarios.map(d => ({ json: { ...d, segmento: x.segmento } })));`);
+  f.nodo('Enviar correo', 'n8n-nodes-base.emailSend', 2.1, [x(12), 100], {
+    fromEmail: expr(`${CFG}.correoRemitente`),
+    toEmail: expr('$json.email'),
+    subject: expr('$json.asunto'),
+    emailFormat: 'text',
+    text: expr('$json.mensaje'),
+    options: {},
+  }, { onError: 'continueRegularOutput', notes: 'Credencial SMTP (o cambia el nodo por Gmail). WhatsApp fuera de 24 h necesita plantilla aprobada.' });
+  codigo(f, 'Filas enviadas', [x(13), 100], ['fidelizacion.js'], `
+const r = $('A quién le toca').first().json;
+const correos = $('Correos').all().map(i => i.json);
+const errores = {};
+$input.all().forEach((item, i) => {
+  const e = item.json && item.json.error;
+  if (e && correos[i]) errores[correos[i].campana_id] = typeof e === 'object' ? JSON.stringify(e) : String(e);
+});
+return r.resultados.flatMap(x => filasCampana(x, { ahora: r.ahora, estado: 'ENVIADO', errores })).map(json => ({ json }));`);
+  codigo(f, 'Filas previstas', [x(10), 420], ['fidelizacion.js'], `
+const r = $('A quién le toca').first().json;
+if (!r.ok) return [];
+return r.resultados.flatMap(x => filasCampana(x, { ahora: r.ahora, estado: 'PREVISTA' })).map(json => ({ json }));`);
+  const columnasCampana = mapa(fidelizacion.COLUMNAS_CAMPANA, '$json');
+  sheetsEscribir(f, 'Registrar envíos', [x(14), 100], 'appendOrUpdate', T.campanas, columnasCampana, 'campana_id');
+  sheetsEscribir(f, 'Registrar vista previa', [x(11), 420], 'appendOrUpdate', T.campanas, columnasCampana, 'campana_id');
+  codigo(f, 'Resultado', [x(15), 300], [], `
+${FILAS_DE}
+const r = $('A quién le toca').first().json;
+const enviados = filasDe('Filas enviadas');
+return [{ json: {
+  ok: r.ok, status: r.status, error: r.error, enviar: r.enviar,
+  resultados: (r.resultados || []).filter(x => x.ok).map(x => ({
+    segmento: x.segmento, destinatarios: x.destinatarios.length, omitidos: x.omitidos, aviso: x.aviso || '',
+    errores: enviados.filter(e => e.segmento === x.segmento && e.estado === 'ERROR_ENVIO').length,
+  })),
+} }];`);
+
+  f.conectar('Cada día 09:00', 'Configuración');
+  f.conectar('Desde la API', 'Configuración');
+  f.cadena('Configuración', ...lecturas.map(([, tabla]) => `Leer ${tabla}`), 'A quién le toca', '¿Enviar?');
+  f.conectar('¿Enviar?', '¿Hay destinatarios?', 0);
+  f.conectar('¿Hay destinatarios?', 'Correos', 0);
+  f.cadena('Correos', 'Enviar correo', 'Filas enviadas', 'Registrar envíos', 'Resultado');
+  f.conectar('¿Hay destinatarios?', 'Resultado', 1);
+  // Vista previa (disparo diario) o petición inválida.
+  f.conectar('¿Enviar?', 'Filas previstas', 1);
+  f.conectar('Filas previstas', 'Registrar vista previa');
+  f.conectar('¿Enviar?', 'Resultado', 1);
+  return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
+}
+
 // ---------- validación y escritura ----------
 
 function validar(flujo) {
@@ -903,6 +994,7 @@ function escribirFlujos(carpeta) {
     '6_confirmar_orden.json': flujoConfirmarOrden(),
     '7_api.json': flujoApi(),
     '8_sincronizar_drive.json': flujoSync(),
+    '9_campanas.json': flujoCampanas(),
   };
   for (const [archivo, flujo] of Object.entries(flujos)) {
     validar(flujo);
@@ -931,6 +1023,7 @@ function main() {
     [T.clientesFuente]: columnasCopia('CLIENTES'),
     [T.ventas]: columnasCopia('VENTAS'),
     [T.fidelizacion]: fidelizacion.COLUMNAS_FIDELIZACION,
+    [T.campanas]: fidelizacion.COLUMNAS_CAMPANA,
   };
   fs.writeFileSync(path.join(RAIZ, 'hoja', 'columnas.json'), JSON.stringify(columnas, null, 2) + '\n');
   // Filas con las que nacen algunas pestañas (valores por defecto que el dashboard después edita).
@@ -947,4 +1040,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { flujoProcesar, flujoEntrada, flujoHumano, flujoErrores, flujoPrueba, flujoConfirmarOrden, flujoApi, flujoSync };
+module.exports = { flujoProcesar, flujoEntrada, flujoHumano, flujoErrores, flujoPrueba, flujoConfirmarOrden, flujoApi, flujoSync, flujoCampanas };
