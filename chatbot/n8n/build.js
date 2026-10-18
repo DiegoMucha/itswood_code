@@ -547,6 +547,14 @@ return [{ json: {
 // ---------- 7. API para otras plataformas ----------
 // GET|POST /webhook/itswood/api/<ruta> con la cabecera X-Api-Key. Rutas y formatos en docs/api.md.
 
+// Pestañas que lee la rama del panel y archivos que se incrustan en "Responder panel".
+const PANEL_TABLAS = [
+  ['config', T.config], ['eventos', T.eventos], ['solicitudes', T.solicitudes], ['conversaciones', T.conversaciones],
+  ['ventas', T.ventas], ['clientes', T.clientes], ['clientesFuente', T.clientesFuente], ['productos', T.productos],
+];
+const ARCHIVOS_PANEL = ['config.js', 'metricas.js', 'panel.js'];
+const RUTAS_PANEL = ['metricas'];
+
 function flujoApi() {
   const f = crearFlujo('ITS WOOD - API', CONFIG.idApi);
   const GET = "$('Petición GET').first().json";
@@ -572,7 +580,7 @@ return [{ json: v }];`;
   codigo(f, 'Petición GET', [220, 200], ['api.js'], peticion('GET'));
   codigo(f, 'Petición POST', [220, 420], ['api.js'], peticion('POST'));
   configuracion(f, [440, 300], ['sheetId']);
-  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads'];
+  const rutas = ['error', 'salud', 'mensaje', 'conversacion', 'solicitudes', 'proveedores', 'cotizaciones', 'confirmar-orden', 'leads', ...RUTAS_PANEL];
   switchRutas(f, 'Enrutar', [660, 300], '$json.ruta', rutas);
 
   // mensaje: el bot responde por HTTP (origen "api"), sin enviar nada por WhatsApp.
@@ -604,6 +612,14 @@ const r = $input.first().json || {};
 if (r.ok === undefined) return [{ json: { status: 500, cuerpo: { ok: false, error: 'El subflujo Confirmar orden no devolvió resultado.' } } }];
 return [{ json: { status: r.status || (r.ok ? 200 : 400), cuerpo: r.ok ? { ok: true, resumen: r.resumen, cotizaciones: r.cotizaciones } : { ok: false, error: r.error } } }];`);
 
+  // Rutas del dashboard calculadas con el libro (panel.js): se leen las pestañas en cadena y se responde.
+  const lecturasPanel = PANEL_TABLAS.map(([, tabla], i) => sheetsLeer(f, `Panel: leer ${tabla}`, [880 + i * 180, 1000], tabla));
+  codigo(f, 'Responder panel', [880 + lecturasPanel.length * 180, 1000], ARCHIVOS_PANEL, `
+const peticion = $('Configuración').first().json;
+const datos = ${JSON.stringify(Object.fromEntries(PANEL_TABLAS.map(([clave, tabla]) => [clave, `Panel: leer ${tabla}`])))};
+for (const clave of Object.keys(datos)) datos[clave] = $(datos[clave]).all().map(i => i.json);
+return [{ json: responderPanel(peticion, datos, new Date().toISOString()) }];`);
+
   responderJson(f, 'Responder', [1540, 300]);
 
   f.conectar('API', 'Petición GET', 0);
@@ -625,6 +641,8 @@ return [{ json: { status: r.status || (r.ok ? 200 : 400), cuerpo: r.ok ? { ok: t
   f.conectar('Formatear lista', 'Responder');
   f.conectar('Enrutar', 'Pedido de orden', salida('confirmar-orden'));
   f.cadena('Pedido de orden', 'Confirmar orden', 'Respuesta de la orden', 'Responder');
+  for (const r of RUTAS_PANEL) f.conectar('Enrutar', lecturasPanel[0], salida(r));
+  f.cadena(...lecturasPanel, 'Responder panel', 'Responder');
   return f.exportar({ ...AJUSTES, errorWorkflow: CONFIG.idErrores });
 }
 

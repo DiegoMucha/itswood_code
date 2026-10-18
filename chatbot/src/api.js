@@ -14,6 +14,7 @@ const RUTAS = {
   cotizaciones: { metodo: 'GET' },
   'confirmar-orden': { metodo: 'POST' },
   leads: { metodo: 'GET' },
+  metricas: { metodo: 'GET' },
 };
 const LIMITE_MAXIMO = 500;
 const INTENCIONES = ['ALTA', 'MEDIA', 'BAJA'];
@@ -68,6 +69,14 @@ function validarPeticion({ metodo, ruta, query, body, ahora }) {
       if (nivel && !INTENCIONES.includes(nivel)) return fallo(400, `nivel debe ser ${INTENCIONES.join(', ')}.`);
       if (!['prioridad', 'fecha'].includes(orden)) return fallo(400, 'orden debe ser prioridad o fecha.');
       return { ok: true, ruta: r, filtros: { prioridad: nivel, estado: t(q.estado).toUpperCase() }, orden, limite };
+    }
+    case 'metricas': {
+      const desde = t(q.desde);
+      const hasta = t(q.hasta);
+      const fecha = /^\d{4}-\d{2}-\d{2}$/;
+      if ((desde && !fecha.test(desde)) || (hasta && !fecha.test(hasta))) return fallo(400, 'desde y hasta van como AAAA-MM-DD.');
+      if (desde && hasta && desde > hasta) return fallo(400, 'desde no puede ser posterior a hasta.');
+      return { ok: true, ruta: r, desde, hasta };
     }
     case 'cotizaciones':
       return { ok: true, ruta: r, filtros: { solicitud_id: t(q.solicitud_id), estado: t(q.estado).toUpperCase() }, limite };

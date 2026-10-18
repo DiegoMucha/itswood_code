@@ -76,6 +76,23 @@ test('flujo Sincronizar Drive: nodos Elegir hoja fuente y Validar fuente', () =>
   assert.equal(trigger.disabled, true, 'sin driveFolderId el trigger de Drive queda desactivado');
 });
 
+test('flujo API: el nodo Responder panel calcula las métricas con las pestañas leídas', () => {
+  const { flujoApi } = require('../n8n/build');
+  const demo = require('../sim/fuente_demo');
+  const api = flujoApi();
+  const vacio = [{}];
+  const datos = {
+    'Configuración': [{ ruta: 'metricas', desde: '2026-06-01', hasta: '2026-06-30', sheetId: 'X' }],
+    'Panel: leer BOT_CONFIG': vacio, 'Panel: leer BOT_EVENTOS': vacio, 'Panel: leer BOT_SOLICITUDES': vacio,
+    'Panel: leer BOT_CONVERSACIONES': vacio, 'Panel: leer BOT_VENTAS': [{ fecha: '2026-06-01', pedido_id: 'P1', total: 100 }, { fecha: '2026-06-02', pedido_id: 'P2', total: 50 }],
+    'Panel: leer BOT_CLIENTES': vacio, 'Panel: leer BOT_CLIENTES_FUENTE': demo.CLIENTES, 'Panel: leer BOT_PRODUCTOS': vacio,
+  };
+  const [r] = ejecutarCodigo(api, 'Responder panel', datos);
+  assert.equal(r.status, 200);
+  assert.equal(r.cuerpo.ticket_promedio.valor, 75);
+  assert.equal(r.cuerpo.clientes_registrados.total, 7);
+});
+
 test('nodo Decidir acción del formulario', () => {
   const flujo = flujoHumano();
   const datos = { 'Formulario de atención': [{ 'WhatsApp del cliente': '51987000001', 'Acción': 'Tomar caso', 'Mensaje al cliente': '', 'Responsable': 'Carla' }] };

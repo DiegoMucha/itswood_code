@@ -12,6 +12,7 @@ const { prepararCotizaciones, identificarProveedor, registrarRespuestaProveedor,
 const api = require('../src/api');
 const { leerConfig } = require('../src/config');
 const { elegirHojaFuente, prepararSync, filaErrorSync } = require('../src/sync');
+const { responderPanel } = require('../src/panel');
 
 function elegir(obj, columnas) { return Object.fromEntries(columnas.map(c => [c, obj[c] === undefined || obj[c] === null ? '' : obj[c]])); }
 
@@ -117,6 +118,16 @@ async function confirmarOrden({ solicitud_id, simular }, entorno) {
   return { ...r, resultados };
 }
 
+// Las mismas pestañas que lee la rama del panel en el flujo [7].
+function datosPanel(hoja) {
+  return {
+    config: hoja.leer(T.config), eventos: hoja.leer(T.eventos), solicitudes: hoja.leer(T.solicitudes),
+    conversaciones: hoja.leer(T.conversaciones), ventas: hoja.leer(T.ventas), clientes: hoja.leer(T.clientes),
+    clientesFuente: hoja.leer(T.clientesFuente), productos: hoja.leer(T.productos),
+  };
+}
+function reloj(entorno) { return (typeof entorno.ahora === 'function' ? entorno.ahora() : entorno.ahora) || new Date().toISOString(); }
+
 // Flujo "ITS WOOD - API".
 async function llamarApi({ metodo, ruta, query, body }, entorno) {
   const { hoja } = entorno;
@@ -132,6 +143,7 @@ async function llamarApi({ metodo, ruta, query, body }, entorno) {
     case 'conversacion': return api.respuestaConversacion(hoja.leer(T.conversaciones, 'wa_id', v.filtros.wa_id), v.filtros.wa_id);
     case 'solicitudes': return api.respuestaLista(v.ruta, hoja.leer(T.solicitudes), v.filtros, v.limite);
     case 'leads': return api.respuestaLeads(hoja.leer(T.solicitudes), v);
+    case 'metricas': return responderPanel(v, datosPanel(hoja), reloj(entorno));
     case 'proveedores': return api.respuestaLista(v.ruta, hoja.leer(T.proveedores), v.filtros, v.limite);
     case 'cotizaciones': return api.respuestaLista(v.ruta, hoja.leer(T.cotizaciones), v.filtros, v.limite);
     case 'confirmar-orden': {

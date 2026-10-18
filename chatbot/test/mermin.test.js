@@ -227,4 +227,57 @@ test('API: GET leads ordena por prioridad y filtra por nivel', async () => {
   assert.equal((await llamarApi({ metodo: 'GET', ruta: 'leads', query: { nivel: 'X' } }, e)).status, 400);
 });
 
+// ---------- 7. Las 5 métricas ----------
+
+const PEDIDO_EMPRESA = ['Hola', '1', 'Acme SAC', 'Luis', 'Fin de año', 'roma', '1', '20', 'no', 'mañana', 'Av. Javier Prado 100, San Isidro', 'mañanas', '1'];
+
+async function escenarioMetricas() {
+  const { llamarApi } = require('../sim/pipeline');
+  const e = entorno();
+  conDrive(e);
+  await sincronizarDrive(e);
+  await conversar(e, LUIS, PEDIDO_EMPRESA);
+  await conversar(e, ANA, ['Hola', '2']);
+  const [sol] = e.hoja.tablas.BOT_SOLICITUDES;
+  await llamarApi({ metodo: 'POST', ruta: 'confirmar-orden', body: { solicitud_id: sol.solicitud_id, simular: true } }, e);
+  return { e, llamarApi };
+}
+
+test('métricas: GET /metricas devuelve exactamente las 5 métricas', async () => {
+  const { e, llamarApi } = await escenarioMetricas();
+  const r = await llamarApi({ metodo: 'GET', ruta: 'metricas', query: {} }, e);
+  assert.equal(r.status, 200);
+  const m = r.cuerpo;
+  assert.deepEqual(Object.keys(m).filter(k => !['ok', 'ruta', 'periodo'].includes(k)),
+    ['tiempo_primera_respuesta', 'conversion', 'pedidos_corporativos', 'ticket_promedio', 'clientes_registrados']);
+  assert.deepEqual(m.periodo, { desde: '2026-09-18', hasta: '2026-10-17' });
+
+  // 1. Antes: línea base de BOT_CONFIG; después: mediana medida en BOT_EVENTOS (segundos en el simulador).
+  assert.equal(m.tiempo_primera_respuesta.antes_minutos, 180);
+  assert.equal(m.tiempo_primera_respuesta.conversaciones_medidas, 2);
+  assert.ok(m.tiempo_primera_respuesta.despues_minutos < 1);
+  assert.ok(m.tiempo_primera_respuesta.mejora_pct > 99);
+  // 2. Una de las dos conversaciones terminó en pedido confirmado.
+  assert.deepEqual(m.conversion, { conversaciones: 2, pedidos: 1, porcentaje: 50 });
+  // 3. Pedido corporativo confirmado este mes; ninguno el anterior.
+  assert.deepEqual(m.pedidos_corporativos, { mes: '2026-10', mes_actual: 1, mes_anterior: 0, variacion_pct: null });
+  // 4. Ventas del período: P002 2550, P005 130, P007 90, P008 85.
+  assert.deepEqual(m.ticket_promedio, { valor: 713.75, pedidos: 4, total_vendido: 2855, fuente: 'BOT_VENTAS' });
+  // 5. Luis (BOT_CLIENTES al derivar) ya estaba en la fuente como Acme: 7 clientes únicos por teléfono.
+  assert.equal(m.clientes_registrados.total, 7);
+  assert.deepEqual(m.clientes_registrados.por_segmento, { EMPRESA: 1, PERSONA: 6, SIN_SEGMENTO: 0 });
+  assert.equal(m.clientes_registrados.en_ambas, 1);
+});
+
+test('métricas: período a medida, ticket sin ventas y validación de fechas', async () => {
+  const { e, llamarApi } = await escenarioMetricas();
+  const junio = await llamarApi({ metodo: 'GET', ruta: 'metricas', query: { desde: '2026-06-01', hasta: '2026-06-30' } }, e);
+  assert.deepEqual(junio.cuerpo.ticket_promedio, { valor: 175, pedidos: 1, total_vendido: 175, fuente: 'BOT_VENTAS' });
+  e.hoja.tablas.BOT_VENTAS = [];
+  const sinVentas = await llamarApi({ metodo: 'GET', ruta: 'metricas', query: {} }, e);
+  assert.equal(sinVentas.cuerpo.ticket_promedio.fuente, 'BOT_SOLICITUDES');
+  assert.equal(sinVentas.cuerpo.ticket_promedio.valor, 1700);
+  assert.equal((await llamarApi({ metodo: 'GET', ruta: 'metricas', query: { desde: '17/10/2026' } }, e)).status, 400);
+});
+
 module.exports = { entorno, conversar, conDrive, ANA, LUIS, CONFIG_DEMO };
