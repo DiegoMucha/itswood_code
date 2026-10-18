@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, AlertTriangle, Star, BarChart3, RefreshCw } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import { tituloNotificacion } from '../lib/notificaciones.js';
 import s from './NotificationDrawer.module.css';
 
-const ICONOS = { pedido_alta: Star, derivado: AlertTriangle, resumen: BarChart3, fuente: RefreshCw };
+const ICONOS = { pedido_alta: Star, pedido: Star, pedido_derivado: AlertTriangle, resumen_diario: BarChart3, sync: RefreshCw };
 
 function hace(iso) {
   const min = Math.round((Date.now() - new Date(iso)) / 60000);
@@ -40,8 +41,8 @@ export default function NotificationDrawer({ abierto, cerrar }) {
       <aside ref={panel} className={`${s.panel} vidrio vidrio-opaco`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Notificaciones">
         <div className={s.cabeza}>
           <h2>Notificaciones</h2>
-          {notificaciones.some((n) => !n.leido) && (
-            <button className="btn btn-chico" onClick={() => notificaciones.filter((n) => !n.leido).forEach((n) => marcarLeida(n.id))}>Marcar todo como leído</button>
+          {notificaciones.some((n) => !n.leida) && (
+            <button className="btn btn-chico" onClick={() => notificaciones.filter((n) => !n.leida).forEach((n) => marcarLeida(n.id))}>Marcar todo como leído</button>
           )}
           <button className="btn btn-icono" onClick={cerrar} aria-label="Cerrar notificaciones"><X size={18} /></button>
         </div>
@@ -51,12 +52,12 @@ export default function NotificationDrawer({ abierto, cerrar }) {
             const Icono = ICONOS[n.tipo] || Star;
             return (
               <li key={n.id}>
-                <button className={`${s.aviso} ${n.leido ? '' : s.nueva} ${s[n.tipo] || ''}`} onClick={() => abrir(n)}>
+                <button className={`${s.aviso} ${n.leida ? '' : s.nueva} ${n.tipo === 'pedido_derivado' ? s.derivado : ''}`} onClick={() => abrir(n)}>
                   <Icono size={18} aria-hidden="true" className={s.icono} />
                   <span className={s.texto}>
-                    <strong>{n.titulo}</strong>
-                    <span>{n.texto}</span>
-                    <small>{hace(n.creado_en)}{!n.leido && ' · sin leer'}</small>
+                    <strong>{tituloNotificacion(n)}</strong>
+                    {n.titulo && <span>{n.texto}</span>}
+                    <small>{hace(n.creado_en)}{!n.leida && ' · sin leer'}</small>
                   </span>
                 </button>
               </li>

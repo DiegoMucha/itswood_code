@@ -7,6 +7,7 @@ import { obtenerCatalogo } from '../services/catalogo.js';
 import { CONFIG_DEMO } from '../data/configDemo.js';
 import { enriquecer, ordenarPorPrioridad } from '../lib/prioridad.js';
 import { usePolling } from '../hooks/usePolling.js';
+import { tituloNotificacion } from '../lib/notificaciones.js';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
@@ -43,11 +44,11 @@ export function AppProvider({ children }) {
     if (!lista) return;
     if (vistas.current) {
       for (const n of lista) {
-        if (!vistas.current.has(n.id) && !n.leido && n.tipo !== 'resumen') {
+        if (!vistas.current.has(n.id) && !n.leida && n.tipo !== 'resumen_diario') {
           toast({
-            titulo: n.titulo, texto: n.texto, enlace: n.enlace,
-            accion: n.tipo === 'fuente' ? 'Ver datos' : 'Ver pedido',
-            tono: n.tipo === 'derivado' ? 'coral' : n.tipo === 'fuente' ? undefined : 'cobre',
+            titulo: tituloNotificacion(n), texto: n.titulo ? n.texto : null, enlace: n.enlace,
+            accion: n.tipo === 'sync' ? 'Ver datos' : 'Ver pedido',
+            tono: n.tipo === 'pedido_derivado' ? 'coral' : n.tipo === 'sync' ? undefined : 'cobre',
           });
         }
       }
@@ -82,7 +83,7 @@ export function AppProvider({ children }) {
   }, [refrescarPedidos, refrescarNotificaciones]);
 
   const marcarLeida = useCallback(async (id) => {
-    setNotificaciones((ns) => ns.map((n) => (n.id === id ? { ...n, leido: true } : n)));
+    setNotificaciones((ns) => ns.map((n) => (n.id === id ? { ...n, leida: true } : n)));
     await marcarLeidaApi(id).catch(() => {});
   }, []);
 

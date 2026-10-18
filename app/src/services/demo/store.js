@@ -68,20 +68,20 @@ export const demo = {
   // Registros de Mermín en esta sesión de demo: para las métricas de respuesta y conversión.
   conversaciones: [],
   notificaciones: [
-    { id: 'N-E1', tipo: 'pedido_alta', titulo: 'Nuevo pedido de prioridad alta', texto: 'Inversiones Andinas SAC · 30 u. · Dock 3 en 1', creado_en: hace(25), leido: false, enlace: '/app/pedidos?id=PED-E001' },
-    { id: 'N-E2', tipo: 'derivado', titulo: 'Pedido derivado: reclamo', texto: 'Andrés: un joyero llegó rayado', creado_en: hace(320), leido: false, enlace: '/app/pedidos?id=PED-E006' },
-    { id: 'N-E3', tipo: 'resumen', titulo: 'Resumen del día', texto: '4 consultas, 2 pedidos, S/ 1,240', creado_en: hace(600), leido: true, enlace: '/app' },
-    { id: 'N-E4', tipo: 'fuente', titulo: 'Hoja Ventas sincronizada', texto: '264 filas leídas', creado_en: hace(900), leido: true, enlace: '/app/datos' },
+    { id: 'N-E1', tipo: 'pedido_alta', titulo: 'Nuevo pedido de prioridad alta', texto: 'Inversiones Andinas SAC · 30 u. · Dock 3 en 1', creado_en: hace(25), leida: false, enlace: '/app/pedidos?id=PED-E001' },
+    { id: 'N-E2', tipo: 'pedido_derivado', titulo: 'Pedido derivado: reclamo', texto: 'Andrés: un joyero llegó rayado', creado_en: hace(320), leida: false, enlace: '/app/pedidos?id=PED-E006' },
+    { id: 'N-E3', tipo: 'resumen_diario', titulo: 'Resumen del día', texto: '4 consultas, 2 pedidos, S/ 1,240', creado_en: hace(600), leida: true, enlace: '/app' },
+    { id: 'N-E4', tipo: 'sync', titulo: 'Hoja Ventas sincronizada', texto: '264 filas leídas', creado_en: hace(900), leida: true, enlace: '/app/datos' },
   ],
   fuentes: [
-    { id: 'F-E1', nombre: 'Ventas 2026 (ejemplo)', tipo: 'ventas', url: 'https://docs.google.com/spreadsheets/d/ejemplo', estado: 'sincronizada', error: null, ultima_sincronizacion: hace(900), filas: 264 },
+    { id: 'F-E1', nombre: 'Ventas 2026 (ejemplo)', tipo: 'ventas', url: 'https://docs.google.com/spreadsheets/d/ejemplo', estado: 'ok', error: null, ultima_sync: hace(900), filas: 264 },
   ],
   siguientePedido: 1,
   siguienteNotificacion: 1,
 };
 
 export function agregarNotificacion(n) {
-  const nueva = { id: `N-${Date.now()}-${demo.siguienteNotificacion++}`, creado_en: new Date().toISOString(), leido: false, ...n };
+  const nueva = { id: `N-${Date.now()}-${demo.siguienteNotificacion++}`, creado_en: new Date().toISOString(), leida: false, ...n };
   demo.notificaciones.unshift(nueva);
   return nueva;
 }

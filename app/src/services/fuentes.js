@@ -29,11 +29,11 @@ function sincronizarDemo(f) {
       f.error = 'La carpeta no tiene una hoja con las columnas esperadas.';
       return;
     }
-    f.estado = 'sincronizada';
+    f.estado = 'ok';
     f.error = null;
-    f.ultima_sincronizacion = new Date().toISOString();
+    f.ultima_sync = new Date().toISOString();
     f.filas = f.filas || { ventas: 264, pedidos: 12, clientes: 225, catalogo: 55 }[f.tipo];
-    agregarNotificacion({ tipo: 'fuente', titulo: `Hoja ${TIPOS_FUENTE[f.tipo].nombre} sincronizada`, texto: `${f.filas} filas leídas`, enlace: '/app/datos', leido: false });
+    agregarNotificacion({ tipo: 'sync', titulo: `Hoja ${TIPOS_FUENTE[f.tipo].nombre} sincronizada`, texto: `${f.filas} filas leídas`, enlace: '/app/datos' });
   }, 2500);
 }
 
@@ -42,7 +42,7 @@ export async function conectarFuente({ url, tipo }) {
     () => pedir('/fuentes', { method: 'POST', body: { url, tipo } }),
     async () => {
       if (!esUrlGoogle(url)) throw new Error('Pega el enlace de una hoja de Google Sheets o de una carpeta de Drive.');
-      const f = { id: `F-${Date.now()}`, nombre: `${TIPOS_FUENTE[tipo].nombre} (ejemplo)`, tipo, url: url.trim(), estado: 'sincronizando', error: null, ultima_sincronizacion: null, filas: null };
+      const f = { id: `F-${Date.now()}`, nombre: `${TIPOS_FUENTE[tipo].nombre} (ejemplo)`, tipo, url: url.trim(), estado: 'sincronizando', error: null, ultima_sync: null, filas: null };
       demo.fuentes.push(f);
       sincronizarDemo(f);
       return structuredClone(f);

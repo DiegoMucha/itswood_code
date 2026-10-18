@@ -59,7 +59,7 @@ export default function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [avisosAbiertos, setAvisosAbiertos] = useState(false);
   const { pathname } = useLocation();
-  const noLeidas = notificaciones.filter((n) => !n.leido).length;
+  const noLeidas = notificaciones.filter((n) => !n.leida).length;
   const actual = [...NAV].reverse().find((n) => pathname.startsWith(n.to));
 
   useEffect(() => {

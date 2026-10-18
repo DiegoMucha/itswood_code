@@ -82,8 +82,8 @@ function resumen(b) {
 
 function derivar(conv, config, motivo, titulo) {
   conv.paso = 'derivado';
-  if (config.notificaciones?.derivado !== false) {
-    agregarNotificacion({ tipo: 'derivado', titulo, texto: motivo, enlace: '/app/pedidos' });
+  if (config.notificaciones?.pedido_derivado !== false) {
+    agregarNotificacion({ tipo: 'pedido_derivado', titulo, texto: motivo, enlace: '/app/pedidos' });
   }
   return [{ texto: `Entiendo. Le paso tu caso a la dueña de ${config.negocio} y te escribe muy pronto por aquí. ${frase(config.tono).gracias}` }];
 }
@@ -108,8 +108,8 @@ function cerrarPedido(conv, config) {
   conv.prioridad = { prioridad, motivo };
 
   const aviso = {
-    alta: { tipo: 'pedido_alta', titulo: 'Nuevo pedido de prioridad alta', activo: config.notificaciones?.alta !== false },
-    derivado: { tipo: 'derivado', titulo: 'Pedido derivado: lo negocias tú', activo: config.notificaciones?.derivado !== false },
+    alta: { tipo: 'pedido_alta', titulo: 'Nuevo pedido de prioridad alta', activo: config.notificaciones?.pedido_alta !== false },
+    derivado: { tipo: 'pedido_derivado', titulo: 'Pedido derivado: lo negocias tú', activo: config.notificaciones?.pedido_derivado !== false },
   }[prioridad] || { tipo: 'pedido', titulo: 'Nuevo pedido resuelto por Mermín', activo: true };
   if (aviso.activo) {
     agregarNotificacion({ tipo: aviso.tipo, titulo: aviso.titulo, texto: `${b.cliente} · ${b.cantidad} u. · ${formatoSoles(monto)}`, enlace: `/app/pedidos?id=${pedido.id}` });

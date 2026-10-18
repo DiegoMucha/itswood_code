@@ -23,7 +23,7 @@ export async function actualizarPedido(id, cambios) {
       if (!p) throw new Error('Ese pedido es del histórico y no se puede cambiar aquí.');
       Object.assign(p, cambios);
       if (cambios.estado === 'derivado') {
-        agregarNotificacion({ tipo: 'derivado', titulo: 'Pedido marcado como derivado', texto: p.cliente.empresa || p.cliente.nombre, enlace: `/app/pedidos?id=${id}` });
+        agregarNotificacion({ tipo: 'pedido_derivado', titulo: 'Pedido marcado como derivado', texto: p.cliente.empresa || p.cliente.nombre, enlace: `/app/pedidos?id=${id}` });
       }
       return p;
     },

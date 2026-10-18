@@ -14,7 +14,8 @@ export const PRIORIDADES = {
 export function calcularPrioridad(pedido, config, hoy = hoyISO()) {
   const r = config.reglas;
   const d = config.derivar || {};
-  const pesoValor = config.prioridad?.peso_valor ?? Infinity;
+  const p = config.prioridad || {};
+  const montoAlta = p.peso_valor === false ? Infinity : (p.monto_alta ?? Infinity);
   const cantidad = pedido.cantidad || 0;
   const monto = pedido.monto || 0;
   const flags = pedido.flags || {};
@@ -34,7 +35,7 @@ export function calcularPrioridad(pedido, config, hoy = hoyISO()) {
 
   const dias = diasRestantes(pedido.fecha_entrega, hoy);
   const cercana = dias !== null && dias >= 0 && dias <= r.dias_fecha_cercana;
-  const valorAlto = monto >= pesoValor;
+  const valorAlto = monto >= montoAlta;
   const partes = [esEmpresa ? 'Empresa' : 'Persona', `${cantidad} u.`];
   if (valorAlto) partes.push(formatoSoles(monto));
   if (cercana) partes.push(dias === 0 ? 'entrega hoy' : `entrega en ${dias} d`);
@@ -113,8 +114,8 @@ export function validarConfig(c) {
   if (!['cercano', 'formal', 'premium'].includes(c.tono)) e.tono = 'Elige un tono';
   const m = c.prioridad?.margen_estimado;
   if (typeof m !== 'number' || m <= 0 || m >= 1) e.margen_estimado = 'Entre 1 % y 99 %';
-  const pv = c.prioridad?.peso_valor;
-  if (typeof pv !== 'number' || pv <= 0) e.peso_valor = 'Debe ser un monto mayor que 0';
+  const ma = c.prioridad?.monto_alta;
+  if (c.prioridad?.peso_valor !== false && (typeof ma !== 'number' || ma <= 0)) e.monto_alta = 'Debe ser un monto mayor que 0';
   if (c.bienvenida?.url_tienda && !/^https?:\/\//.test(c.bienvenida.url_tienda)) e.url_tienda = 'Empieza con https://';
   return e;
 }

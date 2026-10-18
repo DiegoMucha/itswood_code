@@ -21,22 +21,22 @@ export function agruparClientes(ventas) {
 
 const DEFINICIONES = [
   {
-    id: 'empresas-recurrentes', nombre: 'Empresas recurrentes', descripcion: 'Empresas con 2 o más pedidos.',
+    id: 'empresas_recurrentes', nombre: 'Empresas recurrentes', descripcion: 'Empresas con 2 o más pedidos.',
     filtro: (c) => c.empresa && c.pedidos >= 2,
     canal: 'WhatsApp directo', campana: 'Mensaje personal de la dueña con el pedido del año pasado listo para repetir.',
   },
   {
-    id: 'empresas-un-pedido', nombre: 'Empresas de un solo pedido', descripcion: 'Para reactivar antes de la próxima temporada.',
+    id: 'empresas_un_pedido', nombre: 'Empresas de un solo pedido', descripcion: 'Para reactivar antes de la próxima temporada.',
     filtro: (c) => c.empresa && c.pedidos === 1,
     canal: 'WhatsApp directo', campana: 'Recordatorio de temporada con la propuesta corporativa y el grabado de logo.',
   },
   {
-    id: 'personas-recurrentes', nombre: 'Personas recurrentes', descripcion: 'Personas que ya compraron 2 o más veces.',
+    id: 'personas_recurrentes', nombre: 'Personas recurrentes', descripcion: 'Personas que ya compraron 2 o más veces.',
     filtro: (c) => !c.empresa && c.pedidos >= 2,
     canal: 'Pauta segmentada en Instagram / TikTok + WhatsApp', campana: 'Público personalizado con novedades y fechas especiales.',
   },
   {
-    id: 'personas-una-compra', nombre: 'Personas de una sola compra', descripcion: 'Compraron una vez: el reto es la segunda.',
+    id: 'personas_una_compra', nombre: 'Personas de una sola compra', descripcion: 'Compraron una vez: el reto es la segunda.',
     filtro: (c) => !c.empresa && c.pedidos === 1,
     canal: 'Pauta segmentada en Instagram / TikTok', campana: 'Anuncio de “regalo personalizado” para la próxima fecha especial.',
   },
@@ -76,29 +76,32 @@ const COMPLEMENTOS = [
   [/dock|laptop|ecodesk|reloj/i, 'Escritorio', 'Porta post-it o Posacelular con logo'],
 ];
 
+const CANALES = { empresas_recurrentes: 'whatsapp', empresas_un_pedido: 'whatsapp', personas_recurrentes: 'pauta', personas_una_compra: 'pauta', inactivos: 'correo' };
+export const canalCorto = (id) => CANALES[id] || 'whatsapp';
+
 /** Mismas reglas que GET /segmentos/{id}/recomendaciones, para el modo ejemplo. */
 export function recomendaciones(seg, negocio = 'ITS WOOD') {
   const r = [];
   const top = seg.top_productos[0]?.nombre;
   const esEmpresa = seg.id.startsWith('empresas') || seg.id === 'inactivos';
   if (esEmpresa && top) {
-    r.push({ titulo: `Escríbeles 3 semanas antes de Navidad con ${top}`, porque: `Es lo que más compró este segmento (${seg.top_productos[0].unidades} u.). Llegar antes que la competencia asegura el pedido de fin de año.` });
+    r.push({ titulo: `Escríbeles 3 semanas antes de Navidad con ${top}`, motivo: `Es lo que más compró este segmento (${seg.top_productos[0].unidades} u.). Llegar antes que la competencia asegura el pedido de fin de año.` });
   }
   if (seg.id.endsWith('recurrentes')) {
-    r.push({ titulo: 'Ofrece repetir el pedido anterior con un clic', porque: `Estos ${seg.tamano} clientes ya compraron 2 o más veces: repetir es más fácil que decidir de cero.` });
+    r.push({ titulo: 'Ofrece repetir el pedido anterior con un clic', motivo: `Estos ${seg.tamano} clientes ya compraron 2 o más veces: repetir es más fácil que decidir de cero.` });
   }
   const comp = top && COMPLEMENTOS.find(([re]) => re.test(top));
   if (comp) {
-    r.push({ titulo: `Sugiere el complemento: compró ${comp[1]} → ofrece ${comp[2]}`, porque: `${top} es su producto principal; el complemento sube el ticket sin bajar precio.` });
+    r.push({ titulo: `Sugiere el complemento: compró ${comp[1]} → ofrece ${comp[2]}`, motivo: `${top} es su producto principal; el complemento sube el ticket sin bajar precio.` });
   }
-  if (seg.id === 'personas-una-compra') {
-    r.push({ titulo: 'Pide una foto del regalo y ofrece grabar la próxima fecha especial', porque: 'La segunda compra llega cuando el cliente recuerda la experiencia; la foto también sirve para redes.' });
+  if (seg.id === 'personas_una_compra') {
+    r.push({ titulo: 'Pide una foto del regalo y ofrece grabar la próxima fecha especial', motivo: 'La segunda compra llega cuando el cliente recuerda la experiencia; la foto también sirve para redes.' });
   }
   if (seg.id === 'inactivos') {
-    r.push({ titulo: 'Reactívalos con lo nuevo de temporada, no con descuento', porque: `No compran hace más de ${DIAS_INACTIVO} días. ${negocio} es premium: la novedad y la personalización valen más que una rebaja.` });
+    r.push({ titulo: 'Reactívalos con lo nuevo de temporada, no con descuento', motivo: `No compran hace más de ${DIAS_INACTIVO} días. ${negocio} es premium: la novedad y la personalización valen más que una rebaja.` });
   }
-  if (seg.id === 'empresas-un-pedido') {
-    r.push({ titulo: 'Manda una propuesta corporativa armada con su logo', porque: `Compraron una vez (${formatoSoles(seg.monto / Math.max(seg.tamano, 1))} en promedio): una propuesta lista reduce el esfuerzo de volver a pedir.` });
+  if (seg.id === 'empresas_un_pedido') {
+    r.push({ titulo: 'Manda una propuesta corporativa armada con su logo', motivo: `Compraron una vez (${formatoSoles(seg.monto / Math.max(seg.tamano, 1))} en promedio): una propuesta lista reduce el esfuerzo de volver a pedir.` });
   }
   return r;
 }

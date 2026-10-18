@@ -20,7 +20,8 @@ export const CONFIG_DEMO = {
   },
   derivar: { reclamos: true, descuentos: true, disenos_especiales: true, pide_persona: true },
   reglas: { minimo_empresa: 12, umbral_alta: 30, maximo_sin_derivar: 100, dias_fecha_cercana: 14 },
-  prioridad: { peso_valor: 1000, margen_estimado: 0.5 },
-  notificaciones: { alta: true, derivado: true, resumen_diario: true, canal: 'app' },
+  // peso_valor: si el valor del pedido cuenta para la prioridad. monto_alta: desde qué monto sube a alta. [SUPUESTO]
+  prioridad: { peso_valor: true, monto_alta: 1000, margen_estimado: 0.5 },
+  notificaciones: { pedido_alta: true, pedido_derivado: true, resumen_diario: true, canal: 'app' },
   metricas: { tiempo_respuesta_antes_min: null },
 };

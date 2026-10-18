@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, Lightbulb, Megaphone, Users, Check } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
 import { listarSegmentos, obtenerRecomendaciones } from '../services/segmentos.js';
-import { borradores, DIAS_INACTIVO } from '../lib/segmentos.js';
+import { DIAS_INACTIVO } from '../lib/segmentos.js';
 import { formatoFecha, formatoSoles } from '../lib/format.js';
 import EmptyState from '../components/EmptyState.jsx';
 import s from './Fidelizacion.module.css';
@@ -25,23 +24,31 @@ function BotonCopiar({ texto, etiqueta = 'Copiar mensaje' }) {
   );
 }
 
+const PASOS = [
+  { paso: 'Gracias', cuando: '1 día después de la entrega' },
+  { paso: '¿Cómo te fue?', cuando: '1 semana después' },
+  { paso: 'Próxima ocasión', cuando: '3 semanas antes de la siguiente fecha' },
+];
+
 export default function Fidelizacion() {
-  const { config } = useApp();
   const [segmentos, setSegmentos] = useState(null);
   const [activo, setActivo] = useState(null);
-  const [recos, setRecos] = useState([]);
+  const [recos, setRecos] = useState(null);
   const [borrador, setBorrador] = useState('');
   const detalle = useRef(null);
 
   useEffect(() => { listarSegmentos().then(setSegmentos).catch(() => setSegmentos([])); }, []);
 
   const seg = segmentos?.find((x) => x.id === activo);
-  const textos = seg ? borradores(seg, config.negocio) : null;
+  const lista = recos?.recomendaciones || [];
+  const secuencia = (recos?.secuencia_postventa || []).map((texto, i) => ({ texto, ...(PASOS[i] || { paso: `Mensaje ${i + 1}`, cuando: '' }) }));
 
   useEffect(() => {
     if (!seg) return;
-    setBorrador(borradores(seg, config.negocio).principal);
-    obtenerRecomendaciones(seg).then(setRecos).catch(() => setRecos([]));
+    setRecos(null);
+    obtenerRecomendaciones(seg)
+      .then((r) => { setRecos(r); setBorrador(r.recomendaciones?.[0]?.mensaje_borrador || ''); })
+      .catch(() => setRecos({ recomendaciones: [], secuencia_postventa: [] }));
     detalle.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activo]);
@@ -83,10 +90,10 @@ export default function Fidelizacion() {
           <div className={s.columnas}>
             <article className={`${s.bloque} vidrio`}>
               <h3><Lightbulb size={16} aria-hidden="true" /> Recomendaciones postventa</h3>
-              {recos.length === 0 ? <p className="muted">Sin recomendaciones para este segmento.</p> : (
+              {!recos ? <p className="muted">Cargando…</p> : lista.length === 0 ? <p className="muted">Sin recomendaciones para este segmento.</p> : (
                 <ul className={s.recos}>
-                  {recos.map((r) => (
-                    <li key={r.titulo}><strong>{r.titulo}</strong><span><em>¿Por qué?</em> {r.porque}</span></li>
+                  {lista.map((r) => (
+                    <li key={r.titulo}><strong>{r.titulo}</strong><span><em>¿Por qué?</em> {r.motivo}</span></li>
                   ))}
                 </ul>
               )}
@@ -105,7 +112,7 @@ export default function Fidelizacion() {
               </div>
               <h3 className={s.subtitulo}>Seguimiento en 3 mensajes</h3>
               <ol className={s.secuencia}>
-                {textos.secuencia.map((m) => (
+                {secuencia.map((m) => (
                   <li key={m.paso}>
                     <div><strong>{m.paso}</strong> <small className="muted">· {m.cuando}</small></div>
                     <p>{m.texto}</p>

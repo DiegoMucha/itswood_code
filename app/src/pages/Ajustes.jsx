@@ -144,12 +144,16 @@ export default function Ajustes() {
       <section className={`${s.seccion} vidrio`} aria-labelledby="sec-prioridad">
         <h2 id="sec-prioridad">Prioridad <span className="supuesto">SUPUESTO</span></h2>
         <p className="muted">Deben ir de menor a mayor: mínimo para empresa &lt; unidades para alta &lt; máximo sin derivar.</p>
+        <label className={s.interruptor}>
+          <input type="checkbox" role="switch" checked={f.prioridad.peso_valor !== false} onChange={(e) => set('prioridad.peso_valor', e.target.checked)} />
+          <span>Tomar en cuenta el valor del pedido (monto y ganancia)</span>
+        </label>
         <div className={s.grid}>
           <Numero etiqueta="Mínimo de unidades para empresa" valor={f.reglas.minimo_empresa} onChange={(v) => set('reglas.minimo_empresa', entero(v))} error={err('minimo_empresa')} ayuda="Desde aquí cuenta como pedido corporativo." />
           <Numero etiqueta="Unidades para prioridad alta" valor={f.reglas.umbral_alta} onChange={(v) => set('reglas.umbral_alta', entero(v))} error={err('umbral_alta')} />
           <Numero etiqueta="Máximo sin derivar" valor={f.reglas.maximo_sin_derivar} onChange={(v) => set('reglas.maximo_sin_derivar', entero(v))} error={err('maximo_sin_derivar')} ayuda="Más de esto lo negocias tú." />
           <Numero etiqueta="Días de fecha cercana" valor={f.reglas.dias_fecha_cercana} onChange={(v) => set('reglas.dias_fecha_cercana', entero(v))} error={err('dias_fecha_cercana')} />
-          <Numero etiqueta="Monto que sube a alta (S/)" valor={f.prioridad.peso_valor} onChange={(v) => set('prioridad.peso_valor', v === '' ? '' : Number(v))} error={err('peso_valor')} ayuda="Un pedido de este monto o más va primero, sea de quien sea." />
+          <Numero etiqueta="Monto que sube a alta (S/)" valor={f.prioridad.monto_alta ?? ''} onChange={(v) => set('prioridad.monto_alta', v === '' ? '' : Number(v))} error={err('monto_alta')} ayuda="Un pedido de este monto o más va primero, sea de quien sea." disabled={f.prioridad.peso_valor === false} />
           <Numero etiqueta="Margen estimado (%)" valor={Math.round(f.prioridad.margen_estimado * 100)} onChange={(v) => set('prioridad.margen_estimado', v === '' ? '' : Number(v) / 100)} error={err('margen_estimado')} ayuda="No hay margen por producto: se usa uno general." />
         </div>
       </section>
@@ -170,8 +174,8 @@ export default function Ajustes() {
       <section className={`${s.seccion} vidrio`} aria-labelledby="sec-notif">
         <h2 id="sec-notif">Notificaciones</h2>
         <div className={s.checks}>
-          <label className={s.interruptor}><input type="checkbox" role="switch" checked={f.notificaciones.alta} onChange={(e) => set('notificaciones.alta', e.target.checked)} /><span>Pedido de prioridad alta</span></label>
-          <label className={s.interruptor}><input type="checkbox" role="switch" checked={f.notificaciones.derivado} onChange={(e) => set('notificaciones.derivado', e.target.checked)} /><span>Pedido derivado</span></label>
+          <label className={s.interruptor}><input type="checkbox" role="switch" checked={f.notificaciones.pedido_alta} onChange={(e) => set('notificaciones.pedido_alta', e.target.checked)} /><span>Pedido de prioridad alta</span></label>
+          <label className={s.interruptor}><input type="checkbox" role="switch" checked={f.notificaciones.pedido_derivado} onChange={(e) => set('notificaciones.pedido_derivado', e.target.checked)} /><span>Pedido derivado</span></label>
           <label className={s.interruptor}><input type="checkbox" role="switch" checked={f.notificaciones.resumen_diario} onChange={(e) => set('notificaciones.resumen_diario', e.target.checked)} /><span>Resumen diario de métricas</span></label>
         </div>
         <fieldset className={s.radios}>
@@ -199,10 +203,10 @@ export default function Ajustes() {
   );
 }
 
-function Numero({ etiqueta, valor, onChange, error, ayuda }) {
+function Numero({ etiqueta, valor, onChange, error, ayuda, disabled }) {
   return (
     <label className="campo">{etiqueta}
-      <input type="number" inputMode="numeric" min="0" value={valor} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} />
+      <input type="number" inputMode="numeric" min="0" value={valor} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} disabled={disabled} />
       {ayuda && <small>{ayuda}</small>}
       {error && <span className="error">{error}</span>}
     </label>

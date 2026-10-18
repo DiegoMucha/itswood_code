@@ -7,7 +7,7 @@ import EmptyState from '../components/EmptyState.jsx';
 import s from './Datos.module.css';
 
 const ESTADOS = {
-  sincronizada: { texto: 'Sincronizada', icono: CheckCircle2, clase: 'ok' },
+  ok: { texto: 'Sincronizada', icono: CheckCircle2, clase: 'ok' },
   sincronizando: { texto: 'Sincronizando…', icono: Loader2, clase: 'cargando' },
   error: { texto: 'Error', icono: AlertCircle, clase: 'error' },
 };
@@ -117,7 +117,7 @@ export default function Datos() {
               <FileSpreadsheet size={22} aria-hidden="true" className={s.iconoHoja} />
               <div className={s.fuenteTexto}>
                 <strong>{f.nombre}</strong>
-                <small className="muted">{TIPOS_FUENTE[f.tipo]?.nombre} · {f.filas != null ? `${f.filas} filas` : 'sin leer'} · Última sincronización: {hace(f.ultima_sincronizacion)}</small>
+                <small className="muted">{TIPOS_FUENTE[f.tipo]?.nombre} · {f.filas != null ? `${f.filas} filas` : 'sin leer'} · Última sincronización: {hace(f.ultima_sync)}</small>
                 {f.error && <small className={s.textoError}>{f.error}</small>}
               </div>
               <span className={`${s.estado} ${s[e.clase]}`}><Icono size={14} aria-hidden="true" className={e.clase === 'cargando' ? s.gira : ''} /> {e.texto}</span>

@@ -13,6 +13,10 @@ describe('calcularPrioridad', () => {
   it('persona simple es automático', () => expect(calcularPrioridad(p({ tipo: 'persona', cantidad: 1, monto: 60 }), cfg, HOY).prioridad).toBe('automatico'));
   it('persona con fecha cercana es media', () => expect(calcularPrioridad(p({ tipo: 'persona', cantidad: 1, monto: 60, fecha_entrega: '2026-10-20' }), cfg, HOY).prioridad).toBe('media'));
   it('un pedido de mucho valor sube a alta', () => expect(calcularPrioridad(p({ tipo: 'persona', cantidad: 5, monto: 1500 }), cfg, HOY).prioridad).toBe('alta'));
+  it('sin peso del valor, el monto no sube la prioridad', () => {
+    const sinValor = { ...cfg, prioridad: { ...cfg.prioridad, peso_valor: false } };
+    expect(calcularPrioridad(p({ tipo: 'persona', cantidad: 5, monto: 1500 }), sinValor, HOY).prioridad).toBe('automatico');
+  });
   it('reclamo se deriva si está activado', () => {
     expect(calcularPrioridad(p({ flags: { reclamo: true } }), cfg, HOY).prioridad).toBe('derivado');
     const sinReclamos = { ...cfg, derivar: { ...cfg.derivar, reclamos: false } };
