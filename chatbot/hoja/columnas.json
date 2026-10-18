@@ -117,5 +117,10 @@
     "contacto",
     "activo",
     "notas"
+  ],
+  "BOT_CONFIG": [
+    "clave",
+    "valor",
+    "descripcion"
   ]
 }

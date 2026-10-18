@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const motor = require('../src/motor');
 const { PESTANAS: T, RANGO_INVENTARIO, COLUMNAS_PAUTAS } = require('../src/hojas');
 const ordenes = require('../src/ordenes');
+const configBot = require('../src/config');
 
 const RAIZ = path.join(__dirname, '..');
 const SALIDA = path.join(__dirname, 'flujos');
@@ -133,7 +134,19 @@ function mapa(columnas, origen, tabla) {
   }));
 }
 
+// Los archivos de src/ se concatenan en un mismo nodo: un nombre de primer nivel repetido pisaría al otro.
+function revisarNombres(nodo, archivos) {
+  const vistos = {};
+  for (const archivo of archivos) {
+    for (const [, nombre] of fuente(archivo).matchAll(/^(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+      if (vistos[nombre]) throw new Error(`${nodo}: ${nombre} está en ${vistos[nombre]} y en ${archivo}`);
+      vistos[nombre] = archivo;
+    }
+  }
+}
+
 function codigo(f, nombre, pos, archivos, pegamento, extra = {}) {
+  revisarNombres(`${f.nombre} › ${nombre}`, archivos);
   const js = [...archivos.map(fuente), '', '// ---- n8n ----', pegamento.trim()].join('\n');
   return f.nodo(nombre, 'n8n-nodes-base.code', 2, pos, { jsCode: js }, extra);
 }
@@ -243,12 +256,14 @@ return [{ json: registrarRespuestaProveedor({ mensaje, proveedor, cotizaciones, 
   sheetsLeer(f, 'Leer conversación', [x(5), 300], T.conversaciones, ['wa_id', expr(`${ENT}.wa_id`)]);
   sheetsLeer(f, 'Leer catálogo', [x(6), 300], T.catalogo);
   sheetsLeer(f, 'Leer inventario', [x(6), 500], T.inventario, null, RANGO_INVENTARIO);
-  codigo(f, 'Motor conversacional', [x(7), 300], ['motor.js'], `
+  sheetsLeer(f, 'Leer configuración', [x(7), 500], T.config);
+  codigo(f, 'Motor conversacional', [x(7), 300], ['config.js', 'motor.js'], `
 const mensaje = $('Entrada').first().json;
 const conversacion = $('Leer conversación').all().map(i => i.json).find(fila => fila && String(fila.wa_id ?? '') === String(mensaje.wa_id)) || null;
 const catalogo = $('Leer catálogo').all().map(i => i.json);
 const inventario = $('Leer inventario').all().map(i => i.json);
-return [{ json: procesar({ mensaje, conversacion, catalogo, inventario, ahora: new Date().toISOString() }) }];`);
+const config = $('Leer configuración').all().map(i => i.json);
+return [{ json: procesar({ mensaje, conversacion, catalogo, inventario, config, ahora: new Date().toISOString() }) }];`);
   sheetsLeer(f, 'Releer conversación', [x(8), 300], T.conversaciones, ['wa_id', expr(`${ENT}.wa_id`)]);
   codigo(f, 'Comparar modo', [x(9), 300], ['pasos.js'], `
 const motor = $('Motor conversacional').first().json;
@@ -276,8 +291,15 @@ return [{ json: verificarCambioModo(motor, $input.all().map(i => i.json)) }];`);
   sheetsEscribir(f, 'Marcar procesado', [x(16), 400], 'appendOrUpdate', T.eventos, {
     mensaje_id: expr(`${ENT}.mensaje_id`), conversacion_id: expr(`${MOT}.conversacion.conversacion_id`), resultado: expr(`${MOT}.resultado_evento`),
   }, 'mensaje_id');
-  si(f, '¿Avisar al equipo?', [x(17), 400], `!!${MOT}.aviso && !!${CFG}.waAvisos`);
-  whatsappEnviar(f, 'Avisar al equipo', [x(18), 300], `${CFG}.phoneNumberId`, `${CFG}.waAvisos`, `${MOT}.aviso`, {
+  // Eventos extra del motor (BIENVENIDA_WEB): rama aparte para no multiplicar los nodos siguientes.
+  si(f, '¿Hay eventos del bot?', [x(17), 600], `(${MOT}.eventos || []).length > 0`);
+  codigo(f, 'Eventos del bot', [x(18), 600], [], "return $('Motor conversacional').first().json.eventos.map(json => ({ json }));");
+  sheetsEscribir(f, 'Registrar eventos del bot', [x(19), 600], 'append', T.eventos,
+    mapa(motor.COLUMNAS_EVENTO, '$json'));
+  // El destino de BOT_CONFIG (avisos_whatsapp) manda sobre el de la configuración de n8n.
+  const DESTINO_AVISO = `(${MOT}.aviso_destino || ${CFG}.waAvisos)`;
+  si(f, '¿Avisar al equipo?', [x(17), 400], `!!${MOT}.aviso && !!${DESTINO_AVISO}`);
+  whatsappEnviar(f, 'Avisar al equipo', [x(18), 300], `${CFG}.phoneNumberId`, DESTINO_AVISO, `${MOT}.aviso`, {
     onError: 'continueRegularOutput',
     notes: 'Aviso interno provisional. Requiere que el número de avisos haya escrito al número comercial en las últimas 24 h o una plantilla aprobada.',
   });
@@ -312,7 +334,7 @@ return prepararEnvios(motor, mensaje, filas, $('Configuración').first().json.ph
   f.conectar('Guardar respuesta en la cotización', 'Marcar respuesta de proveedor');
   f.conectar('¿Cotización abierta?', 'Marcar respuesta de proveedor', 1);
   f.conectar('Proveedor', 'Leer conversación', 1);
-  f.cadena('Leer conversación', 'Leer catálogo', 'Leer inventario', 'Motor conversacional', 'Releer conversación', 'Comparar modo', '¿Cambió el modo?');
+  f.cadena('Leer conversación', 'Leer catálogo', 'Leer inventario', 'Leer configuración', 'Motor conversacional', 'Releer conversación', 'Comparar modo', '¿Cambió el modo?');
   f.conectar('¿Cambió el modo?', 'Actualizar última entrada', 0);
   f.conectar('Actualizar última entrada', 'Marcar entrada omitida');
   f.conectar('¿Cambió el modo?', 'Guardar conversación', 1);
@@ -325,6 +347,9 @@ return prepararEnvios(motor, mensaje, filas, $('Configuración').first().json.ph
   f.conectar('Guardar cliente', 'Marcar procesado');
   f.conectar('¿Hay solicitud?', 'Marcar procesado', 1);
   f.conectar('Marcar procesado', '¿Avisar al equipo?');
+  f.conectar('Marcar procesado', '¿Hay eventos del bot?');
+  f.conectar('¿Hay eventos del bot?', 'Eventos del bot', 0);
+  f.conectar('Eventos del bot', 'Registrar eventos del bot');
   f.conectar('¿Avisar al equipo?', 'Avisar al equipo', 0);
   f.conectar('Avisar al equipo', 'Verificar antes de enviar');
   f.conectar('¿Avisar al equipo?', 'Verificar antes de enviar', 1);
@@ -715,9 +740,15 @@ function main() {
     [T.errores]: ['fecha', 'flujo', 'nodo', 'mensaje', 'ejecucion_id', 'modo'],
     [T.cotizaciones]: [...ordenes.COLUMNAS_COTIZACION, 'notas_equipo'],
     [T.proveedores]: ordenes.COLUMNAS_PROVEEDOR,
+    [T.config]: configBot.COLUMNAS_CONFIG,
   };
   fs.writeFileSync(path.join(RAIZ, 'hoja', 'columnas.json'), JSON.stringify(columnas, null, 2) + '\n');
-  console.log('hoja/columnas.json actualizado');
+  // Filas con las que nacen algunas pestañas (valores por defecto que el dashboard después edita).
+  const iniciales = {
+    [T.config]: configBot.filasConfigIniciales(),
+  };
+  fs.writeFileSync(path.join(RAIZ, 'hoja', 'filas_iniciales.json'), JSON.stringify(iniciales, null, 2) + '\n');
+  console.log('hoja/columnas.json y hoja/filas_iniciales.json actualizados');
 }
 
 if (require.main === module) main();

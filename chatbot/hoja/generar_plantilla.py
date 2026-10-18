@@ -14,7 +14,7 @@ from openpyxl.comments import Comment
 
 DIR = Path(__file__).parent
 TEXTO = "@"
-COLUMNAS_TEXTO = {"wa_id", "telefono", "mensaje_id", "id", "logo_media_id", "media_id", "fecha_deseada"}
+COLUMNAS_TEXTO = {"wa_id", "telefono", "mensaje_id", "id", "logo_media_id", "media_id", "fecha_deseada", "valor"}
 COLUMNAS_EQUIPO = {"responsable", "notas", "notas_equipo"}
 NOTAS = {
     "modo": "BOT, PENDIENTE_HUMANO, HUMANO o CERRADO. Cámbialo con el formulario de atención, no a mano.",
@@ -48,10 +48,14 @@ def cabecera(ws, columnas):
 
 def main():
     columnas = json.loads((DIR / "columnas.json").read_text(encoding="utf-8"))
+    iniciales = json.loads((DIR / "filas_iniciales.json").read_text(encoding="utf-8"))
     wb = Workbook()
     wb.remove(wb.active)
     for pestana, cols in columnas.items():
-        cabecera(wb.create_sheet(pestana), cols)
+        ws = wb.create_sheet(pestana)
+        cabecera(ws, cols)
+        for fila in iniciales.get(pestana, []):
+            ws.append([fila.get(c, "") for c in cols])
 
     with open(DIR / "catalogo_bot.csv", encoding="utf-8") as f:
         filas = list(csv.reader(f))

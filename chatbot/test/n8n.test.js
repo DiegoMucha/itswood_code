@@ -41,9 +41,12 @@ test('nodos del subflujo: duplicado, motor, comparar modo y preparar envíos', (
   datos['Leer conversación'] = [{}];
   datos['Leer catálogo'] = CATALOGO;
   datos['Leer inventario'] = [{ 'ITEM ': 'TABLA QUESERA ROMA ', 'UNIDADES ': 3 }];
+  datos['Leer configuración'] = [{ clave: 'nombre_bot', valor: 'Mermín' }, { clave: 'url_web', valor: 'https://tienda.example' }];
   const [motor] = ejecutarCodigo(flujo, 'Motor conversacional', datos);
   assert.equal(motor.conversacion.modo, 'BOT');
   assert.match(motor.respuestas[0], /ITS WOOD/);
+  assert.match(motor.respuestas[0], /Soy Mermín/);
+  assert.equal(motor.eventos[0].resultado, 'BIENVENIDA_WEB');
 
   datos['Motor conversacional'] = [motor];
   assert.equal(ejecutarCodigo(flujo, 'Comparar modo', datos, [{}])[0].cambio, false);

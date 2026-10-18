@@ -37,7 +37,8 @@ async function procesarMensaje(mensaje, entorno) {
   const conversacion = hoja.leer(T.conversaciones, 'wa_id', mensaje.wa_id)[0] || null;
   const catalogo = hoja.leer(T.catalogo);
   const inventario = hoja.leer(T.inventario);
-  const motor = procesar({ mensaje, conversacion, catalogo, inventario, ahora: reloj() });
+  const configBot = hoja.leer(T.config);
+  const motor = procesar({ mensaje, conversacion, catalogo, inventario, config: configBot, ahora: reloj() });
 
   const verificacion = verificarCambioModo(motor, hoja.leer(T.conversaciones, 'wa_id', mensaje.wa_id));
   if (verificacion.cambio) {
@@ -55,9 +56,11 @@ async function procesarMensaje(mensaje, entorno) {
   hoja.guardar(T.eventos, 'mensaje_id', {
     mensaje_id: mensaje.mensaje_id, conversacion_id: motor.conversacion.conversacion_id, resultado: motor.resultado_evento,
   });
+  for (const evento of motor.eventos || []) hoja.agregar(T.eventos, evento);
 
-  if (motor.aviso && config.waAvisos) {
-    try { await enviar({ to: config.waAvisos, texto: motor.aviso, aviso: true }); } catch (e) { /* el aviso no detiene la atención */ }
+  const destinoAviso = motor.aviso_destino || config.waAvisos;
+  if (motor.aviso && destinoAviso) {
+    try { await enviar({ to: destinoAviso, texto: motor.aviso, aviso: true }); } catch (e) { /* el aviso no detiene la atención */ }
   }
 
   const envios = prepararEnvios(motor, mensaje, hoja.leer(T.conversaciones, 'wa_id', mensaje.wa_id), config.phoneNumberId);

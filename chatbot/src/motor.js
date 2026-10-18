@@ -6,6 +6,9 @@
 // a guardar, las respuestas a enviar y, cuando corresponde, la solicitud y el cliente a registrar.
 // No escribe nada: quien lo llama guarda primero y envía después.
 
+// En n8n, config.js va concatenado antes de este archivo; en Node se carga con require.
+const CONFIG_BOT = typeof leerConfig === 'function' ? { leerConfig, render, mensajeBienvenida, urlConUtm } : require('./config');
+
 const ZONA_HORARIA = 'America/Lima';
 const MAX_INTENTOS = 3;
 const MAX_TEXTO = 1000;
@@ -243,9 +246,15 @@ function menu() {
   ].join('\n');
 }
 
-function saludo(conv) {
+function negocio(ctx) { return ctx.config.nombre_negocio; }
+
+// Conversación nueva: bienvenida con la redirección a la web (BOT_CONFIG.mensaje_bienvenida).
+function bienvenida(conv, ctx) { return CONFIG_BOT.mensajeBienvenida(ctx.config, conv.nombre); }
+
+// Conversación existente que vuelve al bot: saludo corto, sin repetir la promoción de la web.
+function saludo(conv, ctx) {
   const hola = conv.nombre ? `¡Hola de nuevo, ${conv.nombre}! 👋` : '¡Hola! 👋';
-  return `${hola} Soy el asistente virtual de ITS WOOD. Te ayudo a armar tu pedido y se lo paso al equipo.`;
+  return CONFIG_BOT.render('{hola} Soy {nombre_bot} {emoji_bot}, el asistente de {nombre_negocio}. Te ayudo a armar tu pedido y se lo paso al equipo.', { ...ctx.config, hola });
 }
 
 function pregunta(campo, conv, ctx) {
@@ -290,7 +299,7 @@ function opcionesResumen() {
   return '1️⃣ Confirmar y enviar al equipo\n2️⃣ Corregir un dato\n3️⃣ Cancelar';
 }
 
-function resumenCliente(conv) {
+function resumenCliente(conv, ctx) {
   const lineas = ['📋 Resumen de tu solicitud', `• Tipo: ${conv.segmento === 'EMPRESA' ? 'Empresa' : 'Personal'}`];
   for (const campo of SECUENCIAS[conv.segmento]) {
     lineas.push(`• ${ETIQUETAS[campo]}: ${valorVisible(campo, conv)}`);
@@ -300,7 +309,7 @@ function resumenCliente(conv) {
     }
   }
   lineas.push('');
-  lineas.push('El total es referencial y se calcula con el precio web. El precio final (personalización, volumen y envío), la fecha y la disponibilidad las confirma el equipo de ITS WOOD.');
+  lineas.push(`El total es referencial y se calcula con el precio web. El precio final (personalización, volumen y envío), la fecha y la disponibilidad las confirma el equipo de ${negocio(ctx)}.`);
   lineas.push('');
   lineas.push(opcionesResumen());
   return lineas.join('\n');
@@ -507,7 +516,7 @@ function avanzar(conv, ctx, nota) {
   conv.intentos = '0';
   if (!falta) {
     conv.paso = 'RESUMEN';
-    ctx.respuestas.push(prefijo + resumenCliente(conv));
+    ctx.respuestas.push(prefijo + resumenCliente(conv, ctx));
     return;
   }
   conv.paso = PASO_DE_CAMPO[falta];
@@ -609,7 +618,7 @@ function derivar(conv, ctx, motivo, textoCliente) {
     motivo_derivacion: motivo, resumen: solicitud.resumen, solicitud_id: solicitud.solicitud_id,
   });
   ctx.aviso = [
-    '🔔 Nueva atención ITS WOOD',
+    `🔔 Nueva atención ${negocio(ctx)}`,
     `Cliente: +${conv.wa_id}${conv.nombre || conv.nombre_perfil ? ` (${conv.nombre || conv.nombre_perfil})` : ''}`,
     `Solicitud: ${solicitud.solicitud_id}`,
     `Intención de compra: ${intencion.nivel} (${intencion.puntaje}/100)`,
@@ -617,11 +626,11 @@ function derivar(conv, ctx, motivo, textoCliente) {
     'Toma el caso en el formulario de atención humana para responder.',
   ].join('\n');
   if (motivo === 'SOLICITUD_COMPLETA') {
-    ctx.respuestas.push(`¡Listo! Registré tu solicitud ${solicitud.solicitud_id} ✅\n\nUna persona del equipo de ITS WOOD te escribirá por este mismo chat para confirmar el precio final, la fecha y la forma de pago.`);
+    ctx.respuestas.push(`¡Listo! Registré tu solicitud ${solicitud.solicitud_id} ✅\n\nUna persona del equipo de ${negocio(ctx)} te escribirá por este mismo chat para confirmar el precio final, la fecha y la forma de pago.`);
   } else if (motivo === 'NO_ENTENDIDO') {
-    ctx.respuestas.push('Parece que no te estoy entendiendo bien 🙈 Le pasé lo que conversamos a una persona del equipo de ITS WOOD; te escribirá por este mismo chat.');
+    ctx.respuestas.push(`Parece que no te estoy entendiendo bien 🙈 Le pasé lo que conversamos a una persona del equipo de ${negocio(ctx)}; te escribirá por este mismo chat.`);
   } else {
-    ctx.respuestas.push('Te comunico con una persona del equipo de ITS WOOD. Le dejé el resumen de lo que conversamos y te escribirá por este mismo chat.');
+    ctx.respuestas.push(`Te comunico con una persona del equipo de ${negocio(ctx)}. Le dejé el resumen de lo que conversamos y te escribirá por este mismo chat.`);
   }
 }
 
@@ -684,7 +693,20 @@ function atender(conv, ctx, esInicio) {
   if (m.tipo === 'reaction') { ctx.resultado = 'IGNORADO'; return; }
   const senales = n ? detectarSenales(conv, n) : leerSenales(conv);
   if (n && pideAsesor(n)) { derivar(conv, ctx, 'SOLICITUD_CLIENTE', t); return; }
-  if (esInicio) { conv.paso = 'SEGMENTO'; ctx.respuestas.push(`${saludo(conv)}\n\n${menu()}`); return; }
+  if (esInicio) {
+    conv.paso = 'SEGMENTO';
+    ctx.respuestas.push(`${bienvenida(conv, ctx)}\n\n${menu()}`);
+    const url = CONFIG_BOT.urlConUtm(ctx.config);
+    if (url) {
+      // Se registra para medir después qué ventas web vinieron del bot (código y UTM).
+      ctx.eventos.push({
+        mensaje_id: `BIENV-${str(m.mensaje_id)}`, fecha: ctx.ahoraIso, wa_id: conv.wa_id, conversacion_id: conv.conversacion_id,
+        direccion: 'SISTEMA', tipo: 'evento', texto: url, media_id: '', resultado: 'BIENVENIDA_WEB', estado_entrega: '',
+        detalle: str(ctx.config.codigo_descuento_web),
+      });
+    }
+    return;
+  }
   if (m.tipo === 'audio') {
     ctx.respuestas.push(`Por ahora no puedo escuchar audios 🙏 ¿Me lo escribes? Si prefieres, escribe ASESOR y te atiende una persona.\n\n${preguntaActual(conv, ctx)}`);
     return;
@@ -712,16 +734,18 @@ function atender(conv, ctx, esInicio) {
   // Paso desconocido o la conversación volvió al bot después de una derivación.
   conv.paso = 'SEGMENTO';
   conv.intentos = '0';
-  ctx.respuestas.push(`${saludo(conv)}\n\n${menu()}`);
+  ctx.respuestas.push(`${saludo(conv, ctx)}\n\n${menu()}`);
 }
 
-function procesar({ mensaje, conversacion, catalogo, inventario, ahora }) {
+// config: filas de BOT_CONFIG (o un objeto ya leído). Sin config se usan los valores por defecto.
+function procesar({ mensaje, conversacion, catalogo, inventario, config, ahora }) {
   const ahoraIso = ahora || new Date().toISOString();
   const leida = conversacion && str(conversacion.wa_id) ? conversacion : null;
   const modoLeido = leida ? str(leida.modo).trim().toUpperCase() : '';
   const ctx = {
     mensaje, productos: leerCatalogo(catalogo, inventario), ahoraIso, respuestas: [],
-    solicitud: null, pauta: null, cliente: null, aviso: null, resultado: 'PROCESADO',
+    config: Array.isArray(config) ? CONFIG_BOT.leerConfig(config) : { ...CONFIG_BOT.leerConfig([]), ...(config || {}) },
+    solicitud: null, pauta: null, cliente: null, aviso: null, eventos: [], resultado: 'PROCESADO',
   };
 
   const conv = leida ? copiarFila(leida) : nuevaConversacion(mensaje, ahoraIso);
@@ -753,6 +777,10 @@ function procesar({ mensaje, conversacion, catalogo, inventario, ahora }) {
     pauta: ctx.pauta,
     cliente: ctx.cliente,
     aviso: ctx.aviso,
+    // Destino del aviso según BOT_CONFIG; vacío = el número de avisos de la configuración de n8n.
+    aviso_destino: str(ctx.config.avisos_whatsapp).replace(/\D/g, ''),
+    // Eventos extra para BOT_EVENTOS (por ahora, BIENVENIDA_WEB).
+    eventos: ctx.eventos,
     resultado_evento: ctx.resultado,
   };
 }

@@ -11,6 +11,7 @@ const PESTANAS = {
   catalogo: 'BOT_CATALOGO',
   errores: 'BOT_ERRORES',
   cotizaciones: 'BOT_COTIZACIONES',
+  config: 'BOT_CONFIG',
   proveedores: 'PROVEEDORES',
   pautas: 'PAUTAS ',
   inventario: 'INVENTARIO',
