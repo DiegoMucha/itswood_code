@@ -188,9 +188,12 @@ button:focus-visible {
     border-radius: var(--radio-pildora);
 }
 
+/* Círculo blanco: se separa del vidrio de la barra con una sombra suave */
 .logo-mark {
     width: 30px;
     height: 30px;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(62, 47, 37, 0.18);
 }
 
 .logo-name {
@@ -406,22 +409,26 @@ button:focus-visible {
 }
 
 
-/* Escena de Spline (hero-scene.js). El iframe es más alto que el hero: su centro (donde está
-   la cinta) cae bajo los botones y la insignia de Spline, abajo a la derecha, queda recortada.
-   La máscara funde su borde superior con el degradado del hero. */
+/* Escena de Spline (hero-scene.js). Spline escala la cinta según la ALTURA del iframe
+   (mide ~0.7 veces esa altura de largo), así que el iframe es mucho más alto que el hero:
+   1.6 veces el ancho del hero, para que la cinta cruce de borde a borde. La cinta queda
+   un 6% (de la altura del iframe) sobre su centro; se compensa para que caiga en el 76%
+   del hero, bajo los botones. El resto queda recortado, incluida la insignia de Spline.
+   La máscara funde el borde superior con el degradado, justo por encima de la cinta. */
 .hero-escena {
+    --alto-escena: calc((100vw - 2 * var(--margen-lateral)) * 1.6);
     position: absolute;
     left: 0;
-    top: 36%;
+    top: calc(76% - var(--alto-escena) * 0.44);
     width: 100%;
-    height: 100%;
+    height: var(--alto-escena);
     border: 0;
     background: var(--taupe-oscuro);
     pointer-events: none;   /* decorativa: no captura el scroll ni el mouse */
     opacity: 0;
     transition: opacity 0.8s ease;
-    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 40%);
-    mask-image: linear-gradient(180deg, transparent 0%, #000 40%);
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 33%, #000 38%);
+    mask-image: linear-gradient(180deg, transparent 0%, transparent 33%, #000 38%);
 }
 
 .hero-visual.has-scene .hero-escena {
