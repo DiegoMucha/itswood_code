@@ -168,13 +168,15 @@ button:focus-visible {
     margin: 0 auto;
     padding: 8px 8px 8px 20px;
     border-radius: var(--radio-pildora);
+    /* Más opaco que la receta base: sobre el hero oscuro, los enlaces necesitan 4.5:1 */
+    background: rgba(255, 255, 255, 0.6);
     box-shadow: var(--sombra-suave);
     transition: box-shadow var(--transicion), background-color var(--transicion);
 }
 
 /* "is-scrolled" lo agrega main.js al desplazarse */
 .navbar.is-scrolled {
-    background: rgba(255, 255, 255, 0.62);
+    background: rgba(255, 255, 255, 0.72);
     box-shadow: var(--sombra-vidrio);
 }
 
@@ -213,15 +215,14 @@ button:focus-visible {
     padding: 8px 14px;
     border-radius: var(--radio-pildora);
     font-size: var(--texto-sm);
-    color: var(--tinta-suave);
+    color: var(--tinta);
     text-decoration: none;
     transition: background-color var(--transicion), color var(--transicion);
 }
 
 .nav-link:hover,
 .nav-link.active {
-    color: var(--tinta);
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.75);
 }
 
 .hamburger {
