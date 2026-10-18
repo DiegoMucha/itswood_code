@@ -14,9 +14,9 @@ JavaScript vanilla. Se abre con cualquier servidor estático y se despliega en V
 ```
 .
 ├── index.html                  Estructura de la landing (sin textos: ver content/)
-├── terms.html                  Términos (provisional, [POR COMPLETAR])
-├── privacy.html                Privacidad (provisional, [POR COMPLETAR])
-├── demo/index.html             /demo (provisional, [POR COMPLETAR])
+├── terms.html                  Términos (borrador para prototipo)
+├── privacy.html                Privacidad (borrador para prototipo)
+├── tools/og-image.html         Fuente de la imagen OG (no se despliega)
 └── assets/
     ├── content/
     │   └── landing.es.js       TODOS los textos visibles de la landing
@@ -24,11 +24,13 @@ JavaScript vanilla. Se abre con cualquier servidor estático y se despliega en V
     │   ├── tokens.css          Paleta, tipografía y receta de vidrio (copiable al tablero)
     │   └── styles.css          Estilos de la página
     ├── scripts/
+    │   ├── config.js           APP_URL y SITE_URL: único lugar para las URLs
     │   ├── content.js          Pinta los textos de landing.es.js en el HTML
-    │   ├── main.js             Menú móvil, barra, scrollspy, aparición al hacer scroll
+    │   ├── main.js             Enlaces a la app, og:url, menú móvil, scrollspy, aparición
     │   └── hero-scene.js       Escena 3D de Spline con respaldo estático
     └── images/
-        └── favicon.svg
+        ├── favicon.svg
+        └── og-image.png        Vista previa al compartir (1200×630)
 ```
 
 `ref/` (material de referencia) está en `.gitignore` y `.vercelignore`: nunca se versiona
@@ -46,8 +48,21 @@ python3 -m http.server 4173
 npx serve .
 ```
 
-Luego abre <http://localhost:4173>. Abrir `index.html` con doble clic también funciona,
-salvo el enlace `/demo/`, que necesita servidor.
+Luego abre <http://localhost:4173>.
+
+---
+
+## Configuración: `assets/scripts/config.js`
+
+| Constante  | Para qué |
+|------------|----------|
+| `APP_URL`  | URL base de la app, sin barra final. "Quiero Priora" lleva a `APP_URL + '/app'` y "Ver demo" a `APP_URL + '/app/mermin'`. Mientras sea `'#'`, la sección Demo, su enlace en la barra y el botón "Ver demo" se ocultan solos, y "Quiero Priora" lleva al cierre de la página. |
+| `SITE_URL` | URL pública de la landing en Vercel, sin barra final. Completa `og:url` y vuelve absoluta la `og:image`. |
+
+**Ojo con `SITE_URL`:** WhatsApp, Facebook y LinkedIn no ejecutan JavaScript al generar la
+vista previa, así que solo leen lo que está escrito en el `<head>`. Cuando tengas la URL de
+Vercel, escríbela también en `og:url` y `og:image` de `index.html` (con la URL absoluta de
+la imagen) para que la vista previa funcione en todas las redes.
 
 ---
 
@@ -58,8 +73,9 @@ texto con `data-text="seccion.campo"` y las listas con `data-list` + `<template>
 
 - Si falta un dato, deja `[POR COMPLETAR]`; lo no validado, márcalo `[SUPUESTO]`.
   Ambos se ven resaltados con un borde punteado.
-- El correo de contacto va en `cierre.correo`. Mientras esté vacío se muestra
-  `[POR COMPLETAR]` y el botón del cierre no abre el correo.
+- El correo de contacto va en `correo`. Se usa en el botón "Escríbenos" del cierre y en el pie.
+- Los datos del diagnóstico de ITS WOOD (`caso.diagnostico`) tienen un TODO: confirmar con la
+  dueña que se pueden publicar; si no, cambiarlos por texto cualitativo.
 - Los metadatos SEO (`<title>`, `description`, `og:*`) están en el `<head>` de
   `index.html`, porque buscadores y redes no ejecutan JS. Si cambias el titular, revísalos.
 
@@ -91,6 +107,24 @@ la composición.
 
 ---
 
+## Imagen de vista previa (og-image.png)
+
+Se genera desde `tools/og-image.html` (fondo del hero, cinta en SVG, logo y titular; no
+depende de Spline). Para regenerarla: sirve el repo, abre
+`http://localhost:4173/tools/og-image.html` en una ventana de 1200×630 y captura la pantalla,
+por ejemplo con las DevTools de Chrome (modo dispositivo 1200×630 → *Capture screenshot*).
+Guárdala como `assets/images/og-image.png`.
+
+---
+
+## Páginas legales
+
+`terms.html` y `privacy.html` son **borradores para el prototipo** y lo dicen en un aviso
+visible. Toman la Ley N.º 29733 como marco, sin afirmar que se cumple. Antes de un uso
+real, debe revisarlas un abogado.
+
+---
+
 ## Desplegar en Vercel (sitio estático)
 
 Desde el panel:
@@ -107,7 +141,7 @@ npx vercel        # despliegue de prueba
 npx vercel --prod # producción
 ```
 
-`.vercelignore` excluye `ref/`, archivos del IDE y `.env`.
+`.vercelignore` excluye `ref/`, `tools/`, archivos del IDE y `.env`.
 
 ---
 
