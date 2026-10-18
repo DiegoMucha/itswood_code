@@ -14,5 +14,11 @@
   "idConfirmar": "ID de 'ITS WOOD - Confirmar orden'",
   "idApi": "ID de 'ITS WOOD - API'",
   "credApiId": "ID de la credencial Header Auth de la API",
-  "credApiNombre": "Nombre de esa credencial"
+  "credApiNombre": "Nombre de esa credencial",
+  "idSync": "ID de 'Mermín - Sincronizar Drive'",
+  "idCampanas": "ID de 'Mermín - Campañas de fidelización'",
+  "idReportes": "ID de 'Mermín - Reportes'",
+  "driveFolderId": "Carpeta de Drive que vigila el Google Drive Trigger (opcional; vacío = trigger desactivado)",
+  "correoServicio": "Correo de la cuenta de servicio, para pedir que compartan la carpeta con él",
+  "correoRemitente": "Remitente de los correos de campañas y reportes"
 }

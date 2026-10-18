@@ -70,7 +70,7 @@ Reglas: se busca por `wa_id` / `mensaje_id` (nunca por número de fila), las esc
 - **BOT_SOLICITUDES**: una fila por solicitud completa o derivación, con total referencial (precio web × cantidad).
 - **BOT_CLIENTES**: una fila por `wa_id`.
 - **BOT_EVENTOS**: cada mensaje entrante y saliente. `resultado`: `RECIBIDO`, `PROCESADO`,
-  `SIN_RESPUESTA_ATENCION_HUMANA`, `OMITIDO_CAMBIO_MODO`, `ENVIADO`, `ERROR_ENVIO`, `SIMULADO`; `estado_entrega`
+  `SIN_RESPUESTA_ATENCION_HUMANA`, `OMITIDO_CAMBIO_MODO`, `ENVIADO`, `ERROR_ENVIO`, `SIMULADO`, `BIENVENIDA_WEB`; `estado_entrega`
   con los avisos de Meta.
 - **BOT_ERRORES**: fallos de los flujos, con tokens ocultos.
 
@@ -102,6 +102,26 @@ Qué filtra:
 - Si el cliente dice que solo está mirando, el bot no lo cuenta como respuesta inválida ni insiste.
 
 Los puntos y umbrales están en `src/motor.js` (`PUNTOS_INTENCION`, `UMBRAL_ALTA`, `UMBRAL_MEDIA`).
+
+## Pestañas de Mermín (configuración, fuente de datos y fidelización)
+
+| Pestaña | Quién la escribe | Contenido |
+| --- | --- | --- |
+| `BOT_CONFIG` | Dashboard (`PUT /config`), sincronización | `clave`, `valor`, `descripcion`. Nace con los valores por defecto de `src/config.js`. El bot la lee en cada mensaje. |
+| `BOT_PRODUCTOS` | Flujo [8] | Copia de `PRODUCTOS` de la hoja fuente: `sku, nombre, categoria, precio, costo, stock, activo`. El `costo` alimenta la prioridad por ganancia. |
+| `BOT_CLIENTES_FUENTE` | Flujo [8] | Copia de `CLIENTES` más `segmento, pedidos, total_comprado, ultima_compra` (fidelización). |
+| `BOT_VENTAS` | Flujo [8] | Copia de `VENTAS`: `fecha, pedido_id, cliente_id, sku, cantidad, total, canal, codigo`. |
+| `BOT_FIDELIZACION` | Dashboard (`PUT /fidelizacion`) | Una fila por segmento: `segmento, canal, mensaje, oferta, frecuencia_dias, activo`. |
+| `BOT_CAMPANAS` | Flujo [9] | Vista previa diaria (`PREVISTA`) y envíos (`ENVIADO`, `ERROR_ENVIO`), una fila por `campana_id`. |
+
+`BOT_SOLICITUDES` suma `valor_estimado`, `ganancia_estimada`, `prioridad` y `puntaje_prioridad`; `BOT_EVENTOS` registra
+`BIENVENIDA_WEB` (dirección `SISTEMA`) cuando el primer mensaje redirige a la web.
+
+**Hoja fuente del negocio:** `hoja/plantilla_fuente_mermin.xlsx` (pestañas `PRODUCTOS`, `CLIENTES`, `VENTAS` con datos
+de ejemplo). Se sube a la carpeta de Drive como Google Sheets con un nombre que empiece por `MERMIN_FUENTE`. El bot
+nunca la lee directo: si falta una columna, la sincronización lo anota en `BOT_ERRORES` y conserva la copia anterior.
+Fechas en `dd/mm/aaaa` o `aaaa-mm-dd`; teléfonos de 9 dígitos se completan con 51; un `total` vacío se calcula con el
+precio.
 
 ## PROVEEDORES y BOT_COTIZACIONES
 

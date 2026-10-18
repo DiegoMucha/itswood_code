@@ -69,7 +69,15 @@ Tras reiniciar, los webhooks tardan unos segundos en quedar disponibles (antes r
 | 4 Errores | Registra fallos en `BOT_ERRORES`. |
 | 5 Prueba local | Webhook de pruebas sin WhatsApp. No publicar en operación. |
 | 6 Confirmar orden | Subflujo: marca la orden y pide cotización a proveedores. |
-| 7 API | API para otras plataformas ([api.md](api.md)). Credencial Header Auth `ITS WOOD API`. |
+| 7 API | API para otras plataformas y el dashboard ([api.md](api.md)). Credencial Header Auth `ITS WOOD API` en sus tres webhooks. |
+| 8 Sincronizar Drive | Copia la hoja `MERMIN_FUENTE` de la carpeta de Drive a `BOT_PRODUCTOS`, `BOT_CLIENTES_FUENTE` y `BOT_VENTAS`. Cada 10 min, al cambiar la carpeta y con `POST /sync`. |
+| 9 Campañas de fidelización | Vista previa diaria (09:00) en `BOT_CAMPANAS`; envía por email solo con `POST /campanas/{segmento}/enviar`. |
+| 10 Reportes | Resumen diario (a `hora_resumen_diario`) y semanal (lunes 08:00) por email a `avisos_email`. |
+
+Claves nuevas de `config.local.json` (opcionales): `idSync`, `idCampanas`, `idReportes` (IDs de los flujos 8 a 10),
+`driveFolderId` (carpeta que vigila el Google Drive Trigger; sin ella el trigger queda desactivado y la sincronización
+sigue por Schedule y por la API), `correoServicio` (correo de la cuenta de servicio, que la API muestra para pedir que
+se comparta la carpeta) y `correoRemitente` (remitente de campañas y reportes).
 
 ## 3. Credenciales (se crean en n8n, nunca en la hoja)
 
@@ -80,6 +88,8 @@ Tras reiniciar, los webhooks tardan unos segundos en quedar disponibles (antes r
 | WhatsApp OAuth / Trigger (App ID + App Secret) | WhatsApp Trigger. |
 | Header Auth | Webhook de simulación. |
 | Basic Auth | Formulario de atención humana. |
+| Google Drive (la misma cuenta de servicio) | Búsqueda de la hoja en la carpeta y Google Drive Trigger (flujos 7 y 8). El negocio comparte su carpeta con el correo de la cuenta como lector. |
+| SMTP | Envío de campañas (flujo 9) y reportes (flujo 10). Se puede cambiar el nodo por Gmail. |
 
 Después de crearlas, abrir cada flujo y elegir la credencial en los nodos marcados. Activar los flujos 1 a 4 y
 desactivar el nodo **Webhook de simulación** al pasar a operación.
@@ -97,6 +107,7 @@ Pendiente de verificar con las cuentas existentes:
 
 ## 5. Avisos al equipo
 
-**Avisar al equipo** manda un WhatsApp a `waAvisos` al derivar. Es provisional: solo funciona si ese número escribió
+**Avisar al equipo** manda un WhatsApp a `avisos_whatsapp` de `BOT_CONFIG` (o, si está vacío, a `waAvisos`) al
+derivar. Un lead de prioridad ALTA llega marcado con 🔴, con el valor y la ganancia estimados y el enlace al chat. Es provisional: solo funciona si ese número escribió
 al número comercial en las últimas 24 h; si no, falla sin detener la atención. El caso igualmente aparece en
 `PAUTAS ` y en `BOT_SOLICITUDES`.
