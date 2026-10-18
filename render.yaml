@@ -27,3 +27,11 @@ services:
       # JSON completo de la cuenta de servicio (o el mismo JSON en base64).
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
+      # Login de demo del dashboard (una sola cuenta). Sin estas dos, el dashboard queda abierto.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Clave para firmar los tokens de sesión: texto largo al azar (ver backend/env.example).
+      - key: AUTH_SECRET
+        sync: false
