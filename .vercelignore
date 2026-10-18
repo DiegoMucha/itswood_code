@@ -5,3 +5,7 @@ ref/
 .env
 .env.*
 README.md
+
+# Plantilla del IDE (sin versionar): no forma parte del sitio estático
+index.js
+package.json
