@@ -38,3 +38,4 @@
   .dosCol { grid-template-columns: 1fr; }
   .barraGuardar { border-radius: 18px; }
 }
+.restaurarConfirmar { background: rgba(235, 130, 120, .18); border-color: var(--coral); color: var(--coral-oscuro); }

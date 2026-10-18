@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Save, ExternalLink, Sparkles } from 'lucide-react';
+import { Save, ExternalLink, Sparkles, RotateCcw } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { validarConfig } from '../lib/prioridad.js';
+import { CONFIG_DEMO } from '../data/configDemo.js';
 import s from './Ajustes.module.css';
 
 const TONOS = [
@@ -21,6 +22,13 @@ const reemplazarPalabra = (texto, viejo, nuevo) => {
   const escapado = viejo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return texto.replace(new RegExp(`(?<!\\p{L})${escapado}(?!\\p{L})`, 'gu'), nuevo);
 };
+
+// Solo los campos que se pueden editar aquí (lo que acepta PATCH /config).
+const editables = (c) => ({
+  asistente: c.asistente.trim(), textos: { saludo: c.textos.saludo.trim() }, tono: c.tono,
+  reglas: c.reglas, derivar: c.derivar, bienvenida: c.bienvenida, prioridad: c.prioridad,
+  notificaciones: c.notificaciones, metricas: c.metricas,
+});
 
 export default function Ajustes() {
   const { config, guardarConfig, modoEjemplo, toast } = useApp();
@@ -48,6 +56,31 @@ export default function Ajustes() {
   const entero = (v) => (v === '' ? '' : Math.round(Number(v)));
   const err = (k) => errores[k];
 
+  // Pide un segundo toque para no borrar la configuración por accidente.
+  const [confirmarRestaurar, setConfirmarRestaurar] = useState(false);
+  useEffect(() => {
+    if (!confirmarRestaurar) return undefined;
+    const timer = setTimeout(() => setConfirmarRestaurar(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmarRestaurar]);
+
+  const restaurar = async () => {
+    if (!confirmarRestaurar) {
+      setConfirmarRestaurar(true);
+      return;
+    }
+    setConfirmarRestaurar(false);
+    setGuardando(true);
+    try {
+      await guardarConfig(editables(CONFIG_DEMO));
+      toast({ titulo: 'Valores restaurados', texto: `Volvió la configuración inicial. ${CONFIG_DEMO.asistente} ya la usa.` });
+    } catch (ex) {
+      toast({ titulo: 'No se pudo restaurar', texto: ex.message, tono: 'coral' });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   const guardar = async (e) => {
     e.preventDefault();
     if (Object.keys(errores).length) {
@@ -56,11 +89,7 @@ export default function Ajustes() {
     }
     setGuardando(true);
     try {
-      await guardarConfig({
-        asistente: f.asistente.trim(), textos: { saludo: f.textos.saludo.trim() }, tono: f.tono,
-        reglas: f.reglas, derivar: f.derivar, bienvenida: f.bienvenida, prioridad: f.prioridad,
-        notificaciones: f.notificaciones, metricas: f.metricas,
-      });
+      await guardarConfig(editables(f));
       toast({ titulo: 'Cambios guardados', texto: `${f.asistente} ya usa la nueva configuración y las prioridades se recalcularon.` });
     } catch (ex) {
       toast({ titulo: 'No se pudo guardar', texto: ex.message, tono: 'coral' });
@@ -196,6 +225,9 @@ export default function Ajustes() {
 
       <div className={`${s.barraGuardar} vidrio vidrio-opaco`}>
         <span className="muted">{modoEjemplo ? 'Solo se guarda en esta demo.' : hayCambios ? 'Tienes cambios sin guardar.' : 'Todo guardado.'}</span>
+        <button type="button" className={`btn ${confirmarRestaurar ? s.restaurarConfirmar : ''}`} onClick={restaurar} disabled={guardando} aria-live="polite">
+          <RotateCcw size={16} aria-hidden="true" /> {confirmarRestaurar ? 'Toca otra vez para restaurar' : 'Restaurar valores'}
+        </button>
         <button type="button" className="btn" onClick={() => setF(structuredClone(config))} disabled={!hayCambios || guardando}>Descartar</button>
         <button type="submit" className="btn btn-primario" disabled={!hayCambios || guardando}><Save size={16} aria-hidden="true" /> {guardando ? 'Guardando…' : 'Guardar'}</button>
       </div>
