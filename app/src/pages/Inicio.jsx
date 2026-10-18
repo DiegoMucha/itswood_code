@@ -8,7 +8,7 @@ import { obtenerMetricasChat } from '../services/metricas.js';
 import { obtenerVentasHistoricas } from '../services/pedidos.js';
 import { calcularMetricas, mesesDisponibles } from '../lib/metricas.js';
 import { formatoNumero, formatoPct, formatoSoles, nombreMes, textoDias } from '../lib/format.js';
-import { estaCerrado } from '../lib/prioridad.js';
+import { ordenarBandeja } from '../lib/prioridad.js';
 import InfoTip from '../components/InfoTip.jsx';
 import PriorityBadge from '../components/PriorityBadge.jsx';
 import EmptyState from '../components/EmptyState.jsx';
@@ -56,11 +56,8 @@ export default function Inicio() {
   const m = useMemo(() => calcularMetricas(ventas, periodo, config.reglas.minimo_empresa), [periodo, config.reglas.minimo_empresa]);
   const meses = useMemo(() => mesesDisponibles(ventas), []);
 
-  // "Atiende primero": lo vivo de Mermín (alta o derivado, sin confirmar), y si falta, lo abierto del histórico.
-  const bandeja = useMemo(() => {
-    const urgentes = pedidos.filter((p) => ['alta', 'derivado'].includes(p.prioridad) && !estaCerrado(p) && p.estado_api !== 'confirmado' && (p.dias === null || p.dias >= 0));
-    return urgentes.slice(0, 5);
-  }, [pedidos]);
+  // "Atiende primero": lo recién llegado de Mermín arriba; luego lo urgente por prioridad y fecha.
+  const bandeja = useMemo(() => ordenarBandeja(pedidos), [pedidos]);
 
   const confirmar = async (p) => {
     try {

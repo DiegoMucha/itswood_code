@@ -119,3 +119,21 @@ export function validarConfig(c) {
   if (c.bienvenida?.url_tienda && !/^https?:\/\//.test(c.bienvenida.url_tienda)) e.url_tienda = 'Empieza con https://';
   return e;
 }
+
+const RECIEN_LLEGADO_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * "Atiende primero": los pedidos de Mermín que acaban de llegar (alta o derivado,
+ * sin confirmar, de las últimas 24 h) van arriba, del más nuevo al más antiguo.
+ * Después, el resto de lo urgente en el orden por prioridad y fecha.
+ * `pedidos` ya viene ordenado con ordenarPorPrioridad.
+ */
+export function ordenarBandeja(pedidos, limite = 5, ahora = Date.now()) {
+  const urgentes = pedidos.filter((p) => ['alta', 'derivado'].includes(p.prioridad)
+    && !estaCerrado(p) && p.estado_api !== 'confirmado' && (p.dias === null || p.dias >= 0));
+  const esRecien = (p) => p.origen === 'mermin' && p.estado_api === 'nuevo' && p.creado_en
+    && ahora - new Date(p.creado_en).getTime() <= RECIEN_LLEGADO_MS;
+  const recientes = urgentes.filter(esRecien).sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
+  const resto = urgentes.filter((p) => !esRecien(p));
+  return [...recientes, ...resto].slice(0, limite);
+}

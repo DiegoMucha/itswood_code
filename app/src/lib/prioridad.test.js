@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularPrioridad, enriquecer, ordenarPorPrioridad, validarConfig } from './prioridad.js';
+import { calcularPrioridad, enriquecer, ordenarPorPrioridad, ordenarBandeja, validarConfig } from './prioridad.js';
 import { CONFIG_DEMO } from '../data/configDemo.js';
 
 const HOY = '2026-10-17';
@@ -59,5 +59,32 @@ describe('validarConfig', () => {
   it('limita nombre, saludo y margen', () => {
     const e = validarConfig({ ...cfg, asistente: 'x'.repeat(21), textos: { saludo: '' }, prioridad: { ...cfg.prioridad, margen_estimado: 1.5 } });
     expect(Object.keys(e)).toEqual(expect.arrayContaining(['asistente', 'saludo', 'margen_estimado']));
+  });
+});
+
+describe('ordenarBandeja', () => {
+  const AHORA = new Date('2026-10-17T22:00:00-05:00').getTime();
+  const hace = (min) => new Date(AHORA - min * 60000).toISOString();
+  const lista = enriquecer([
+    p({ id: 'vieja-pronto', cantidad: 45, fecha_entrega: '2026-10-26', estado_api: 'nuevo', creado_en: hace(140) }),
+    p({ id: 'nueva-tarde', cantidad: 30, fecha_entrega: '2026-12-15', estado_api: 'nuevo', creado_en: hace(1) }),
+    p({ id: 'derivada-media-hora', cantidad: 150, fecha_entrega: '2026-11-16', estado_api: 'nuevo', creado_en: hace(30) }),
+    p({ id: 'de-ayer', cantidad: 40, fecha_entrega: '2026-10-20', estado_api: 'nuevo', creado_en: hace(60 * 30) }),
+    p({ id: 'confirmada', cantidad: 40, fecha_entrega: '2026-10-19', estado_api: 'confirmado', creado_en: hace(5) }),
+    p({ id: 'historico', origen: 'historico', cantidad: 40, fecha_entrega: '2026-10-18', estado: 'Pendiente' }),
+    p({ id: 'automatico', tipo: 'persona', cantidad: 1, monto: 50, estado_api: 'nuevo', creado_en: hace(2) }),
+  ], cfg, HOY);
+  const orden = ordenarBandeja(ordenarPorPrioridad(lista), 10, AHORA).map((x) => x.id);
+
+  it('lo recién llegado de Mermín va primero, del más nuevo al más antiguo', () => {
+    expect(orden.slice(0, 3)).toEqual(['nueva-tarde', 'derivada-media-hora', 'vieja-pronto']);
+  });
+  it('después va el resto por prioridad y fecha (lo de más de 24 h y el histórico)', () => {
+    expect(orden.slice(3)).toEqual(['de-ayer', 'historico']);
+  });
+  it('no incluye lo confirmado ni lo automático, y respeta el límite', () => {
+    expect(orden).not.toContain('confirmada');
+    expect(orden).not.toContain('automatico');
+    expect(ordenarBandeja(ordenarPorPrioridad(lista), 2, AHORA)).toHaveLength(2);
   });
 });
