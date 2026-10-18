@@ -5,6 +5,10 @@
 //   node scripts/probar_backend.mjs https://priora-backend.onrender.com
 //   node scripts/probar_backend.mjs http://localhost:3000 --origen https://priora-app.vercel.app
 //   node scripts/probar_backend.mjs <url> --solo-lectura      (no crea pedidos ni cambia nada)
+//   node scripts/probar_backend.mjs <url> --correo <correo> --contrasena <clave>   (si el backend tiene login)
+//
+// Con login activo (/health dice "auth": true) hace falta la cuenta del dashboard: por --correo/--contrasena o por
+// las variables PRIORA_CORREO / PRIORA_CONTRASENA (así la clave no queda en el historial de la terminal).
 //
 // Sin --solo-lectura crea 3 pedidos de prueba (Grupo Miraflores SAC, Valeria, Constructora Pacífico SAC) y marca
 // uno como confirmado. Si el backend guarda en Google Sheets, quedan en la pestaña Pedidos.
@@ -13,16 +17,23 @@ import { ESCENARIOS, correrEscenario } from './escenarios.mjs';
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => /^https?:\/\//.test(a)) || process.env.API_URL || 'http://localhost:3000').replace(/\/$/, '');
-const origen = args.includes('--origen') ? args[args.indexOf('--origen') + 1] : null;
+const opcion = (nombre) => (args.includes(nombre) ? args[args.indexOf(nombre) + 1] : null);
+const origen = opcion('--origen');
+const correo = opcion('--correo') || process.env.PRIORA_CORREO || null;
+const contrasena = opcion('--contrasena') || process.env.PRIORA_CONTRASENA || null;
 const soloLectura = args.includes('--solo-lectura');
 const LIMITE_APP_MS = 4000;
+let token = null;
 
 const resultados = [];
 async function llamar(ruta, { method = 'GET', body, form } = {}) {
   const t0 = Date.now();
   const res = await fetch(`${base}${ruta}`, {
     method,
-    headers: { ...(form ? {} : { 'Content-Type': 'application/json' }), ...(origen ? { Origin: origen } : {}) },
+    headers: {
+      ...(form ? {} : { 'Content-Type': 'application/json' }), ...(origen ? { Origin: origen } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: form || (body !== undefined ? JSON.stringify(body) : undefined),
     signal: AbortSignal.timeout(90000),
   });
@@ -48,12 +59,29 @@ const medir = (r, ruta) => { if (r.ms > LIMITE_APP_MS) lentas.push(`${ruta} tard
 console.log(`Probando ${base}${origen ? ` con Origin ${origen}` : ''}${soloLectura ? ' (solo lectura)' : ''}\n`);
 
 // Render (plan gratis) duerme el servicio: la primera llamada puede tardar ~1 min en despertarlo.
+let conLogin = false;
 await paso('GET /health (despierta el servicio)', async () => {
   const r = await llamar('/health');
   exigir(r.status === 200 && r.datos.ok, `status ${r.status}`);
   if (origen) exigir(r.headers.get('access-control-allow-origin'), `CORS: el backend no permite ${origen}; revisa FRONTEND_ORIGIN`);
-  return `almacén ${r.datos.almacen} · Google ${r.datos.google ? 'sí' : 'no'} · ${r.ms} ms${r.datos.ultimo_error ? ` · ÚLTIMO ERROR: ${r.datos.ultimo_error}` : ''}`;
+  conLogin = Boolean(r.datos.auth);
+  return `almacén ${r.datos.almacen} · Google ${r.datos.google ? 'sí' : 'no'} · login ${conLogin ? 'sí' : 'no'} · ${r.ms} ms${r.datos.ultimo_error ? ` · ÚLTIMO ERROR: ${r.datos.ultimo_error}` : ''}`;
 });
+
+if (conLogin) {
+  await paso('Sin token, las rutas del dashboard responden 401', async () => {
+    const r = await llamar('/pedidos');
+    exigir(r.status === 401, `status ${r.status}: el dashboard está abierto`);
+    return r.datos.error;
+  });
+  await paso('POST /auth/login', async () => {
+    exigir(correo && contrasena, 'El backend tiene login: pasa --correo y --contrasena (o PRIORA_CORREO y PRIORA_CONTRASENA)');
+    const r = await llamar('/auth/login', { method: 'POST', body: { correo, contrasena } });
+    exigir(r.status === 200 && r.datos.token, `status ${r.status}: ${r.datos?.error || ''}`);
+    token = r.datos.token;
+    return `sesión hasta ${r.datos.expira_en} · ${r.ms} ms`;
+  });
+}
 
 for (const ruta of ['/config', '/catalogo', '/pedidos', `/metricas?periodo=${new Date().getFullYear()}`, '/segmentos', '/segmentos/empresas_un_pedido/recomendaciones', '/fuentes', '/notificaciones']) {
   await paso(`GET ${ruta}`, async () => {
