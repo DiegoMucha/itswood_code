@@ -34,6 +34,9 @@ export function AppProvider({ children }) {
   const refrescarPedidos = useCallback(async () => {
     try {
       setPedidosCrudos(await listarPedidos());
+    } catch (e) {
+      // 401: la sesión venció y RequiereSesion ya lleva a /login.
+      if (e?.status !== 401) throw e;
     } finally {
       setCargandoPedidos(false);
     }
@@ -63,8 +66,10 @@ export function AppProvider({ children }) {
     (async () => {
       await detectarBackend();
       setConfig(await obtenerConfig());
-      refrescarCatalogo();
-    })();
+      await refrescarCatalogo();
+    })().catch((e) => {
+      if (e?.status !== 401) throw e; // 401: la sesión venció y RequiereSesion ya lleva a /login.
+    });
   }, [refrescarCatalogo]);
 
   usePolling(refrescarPedidos, 10000);
