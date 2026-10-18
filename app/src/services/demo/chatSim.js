@@ -110,7 +110,7 @@ function cerrarPedido(conv, config) {
   const aviso = {
     alta: { tipo: 'pedido_alta', titulo: 'Nuevo pedido de prioridad alta', activo: config.notificaciones?.pedido_alta !== false },
     derivado: { tipo: 'pedido_derivado', titulo: 'Pedido derivado: lo negocias tú', activo: config.notificaciones?.pedido_derivado !== false },
-  }[prioridad] || { tipo: 'pedido', titulo: 'Nuevo pedido resuelto por Mermín', activo: true };
+  }[prioridad] || { tipo: 'pedido', titulo: `Nuevo pedido resuelto por ${config.asistente}`, activo: true };
   if (aviso.activo) {
     agregarNotificacion({ tipo: aviso.tipo, titulo: aviso.titulo, texto: `${b.cliente} · ${b.cantidad} u. · ${formatoSoles(monto)}`, enlace: `/app/pedidos?id=${pedido.id}` });
   }
