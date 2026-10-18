@@ -65,9 +65,20 @@ export function enriquecer(pedidos, config, hoy = hoyISO()) {
   });
 }
 
-/** Derivado y alta primero, luego media, luego automático; dentro, por fecha y luego por valor. */
+const CERRADOS = new Set(['Entregado', 'Enviado']);
+export const estaCerrado = (p) => CERRADOS.has(p.estado);
+
+/**
+ * Derivado y alta primero, luego media, luego automático; dentro, por fecha y luego por valor.
+ * Los pedidos vivos de Mermín van antes que el histórico de la hoja, y lo ya
+ * entregado o enviado va al final para no tapar lo que falta atender.
+ */
+const bloque = (p) => (estaCerrado(p) ? 2 : p.origen === 'historico' ? 1 : 0);
 export function ordenarPorPrioridad(pedidos) {
   return [...pedidos].sort((a, b) => {
+    const ca = bloque(a);
+    const cb = bloque(b);
+    if (ca !== cb) return ca - cb;
     const ra = PRIORIDADES[a.prioridad]?.rango ?? 9;
     const rb = PRIORIDADES[b.prioridad]?.rango ?? 9;
     if (ra !== rb) return ra - rb;

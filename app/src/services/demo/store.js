@@ -13,7 +13,7 @@ const producto = (id, cantidad) => {
 const PEDIDOS_EJEMPLO = [
   {
     id: 'PED-E001', ejemplo: true, creado_en: hace(25),
-    cliente: { nombre: 'Rosa (Ejemplo)', empresa: 'Inversiones Andinas SAC (Ejemplo)', tipo: 'empresa', ya_compro_antes: true },
+    cliente: { nombre: 'Rosa', empresa: 'Inversiones Andinas SAC', tipo: 'empresa', ya_compro_antes: true },
     ocasion: 'Navidad', fecha_requerida: sumarDias(hoy, 21),
     productos: [producto('PR-4D655976', 30)],
     personalizacion: 'Logo de la empresa y nombre de cada colaborador', estado: 'nuevo',
@@ -21,7 +21,7 @@ const PEDIDOS_EJEMPLO = [
   },
   {
     id: 'PED-E002', ejemplo: true, creado_en: hace(70),
-    cliente: { nombre: 'Martín (Ejemplo)', empresa: 'Estudio Contable Ríos (Ejemplo)', tipo: 'empresa', ya_compro_antes: false },
+    cliente: { nombre: 'Martín', empresa: 'Estudio Contable Ríos', tipo: 'empresa', ya_compro_antes: false },
     ocasion: 'Aniversario', fecha_requerida: sumarDias(hoy, 35),
     productos: [producto('PR-4B75357B', 150)],
     personalizacion: 'Logo grabado', estado: 'nuevo',
@@ -29,7 +29,7 @@ const PEDIDOS_EJEMPLO = [
   },
   {
     id: 'PED-E003', ejemplo: true, creado_en: hace(140),
-    cliente: { nombre: 'Carla (Ejemplo)', empresa: 'Colegio Los Pinos (Ejemplo)', tipo: 'empresa', ya_compro_antes: false },
+    cliente: { nombre: 'Carla', empresa: 'Colegio Los Pinos', tipo: 'empresa', ya_compro_antes: false },
     ocasion: 'Día del maestro', fecha_requerida: sumarDias(hoy, 9),
     productos: [producto('PR-492A873B', 45)],
     personalizacion: 'Nombre de cada profesor', estado: 'nuevo',
@@ -37,7 +37,7 @@ const PEDIDOS_EJEMPLO = [
   },
   {
     id: 'PED-E004', ejemplo: true, creado_en: hace(200),
-    cliente: { nombre: 'Jorge (Ejemplo)', empresa: 'Clínica Sol (Ejemplo)', tipo: 'empresa', ya_compro_antes: false },
+    cliente: { nombre: 'Jorge', empresa: 'Clínica Sol', tipo: 'empresa', ya_compro_antes: false },
     ocasion: 'Navidad', fecha_requerida: sumarDias(hoy, 45),
     productos: [producto('PR-48A95AE5', 18)],
     personalizacion: null, estado: 'nuevo',
@@ -45,7 +45,7 @@ const PEDIDOS_EJEMPLO = [
   },
   {
     id: 'PED-E005', ejemplo: true, creado_en: hace(260),
-    cliente: { nombre: 'Lucía (Ejemplo)', empresa: null, tipo: 'persona', ya_compro_antes: false },
+    cliente: { nombre: 'Lucía', empresa: null, tipo: 'persona', ya_compro_antes: false },
     ocasion: 'Cumpleaños', fecha_requerida: sumarDias(hoy, 25),
     productos: [producto('PR-4257E8A7', 1)],
     personalizacion: 'Fecha y "Te quiero, mamá"', estado: 'nuevo',
@@ -53,7 +53,7 @@ const PEDIDOS_EJEMPLO = [
   },
   {
     id: 'PED-E006', ejemplo: true, creado_en: hace(320),
-    cliente: { nombre: 'Andrés (Ejemplo)', empresa: null, tipo: 'persona', ya_compro_antes: true },
+    cliente: { nombre: 'Andrés', empresa: null, tipo: 'persona', ya_compro_antes: true },
     ocasion: 'Reclamo', fecha_requerida: sumarDias(hoy, 4),
     productos: [producto('PR-496A7867', 2)],
     personalizacion: null, estado: 'nuevo', flags: { reclamo: true },
